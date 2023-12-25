@@ -27,69 +27,21 @@ union RegF {
         uint8_t N : 1; // Negative
     } flags;
 
-    // get a flag
-    uint8_t get(const char &flag) {
-        switch (flag) {
-        case 'C':
-            return flags.C;
-        case 'Z':
-            return flags.Z;
-        case 'I':
-            return flags.I;
-        case 'D':
-            return flags.D;
-        case 'B':
-            return flags.B;
-        case 'U':
-            return flags.U;
-        case 'V':
-            return flags.V;
-        case 'N':
-            return flags.N;
-        default:
-            return 0;
-        }
-    }
+    // set the negative flag
+    inline void SetN(const Byte &f) { flags.N = (f & (1 << 7)) != 0; }
 
-    // toggle a flag
-    void set(const char &flag) {
-        switch (flag) {
-        case 'C':
-            flags.C = !flags.C;
-            break;
-        case 'Z':
-            flags.Z = !flags.Z;
-            break;
-        case 'I':
-            flags.I = !flags.I;
-            break;
-        case 'D':
-            flags.D = !flags.D;
-            break;
-        case 'B':
-            flags.B = !flags.B;
-            break;
-        case 'U':
-            flags.U = !flags.U;
-            break;
-        case 'V':
-            flags.V = !flags.V;
-            break;
-        case 'N':
-            flags.N = !flags.N;
-            break;
-        default:
-            break;
-        }
-    }
+    // set the zero flag
+    inline void SetZ(const Byte &f) { flags.Z = f == 0x00; }
 };
 
 struct CPU {
 
     // Initial stack pointer value
     static constexpr uint8_t SP_INIT = 0xFD;
-    // Initial program counter address
-    static constexpr uint16_t PC_ADDR = 0xFFFC;
+    // PC address for reset / interrupt / NMI
+    static constexpr uint16_t ADDR_RES = 0xFFFC;
+    static constexpr uint16_t ADDR_IRQ = 0xFFFE;
+    static constexpr uint16_t ADDR_NMI = 0xFFFA;
 
     // Registers
     // store results and the program control flow
@@ -105,9 +57,9 @@ struct CPU {
 
     // Temporary Registers
     // store the fetched data and addressess
-    RegW ABS; // absolute address
-    RegW REL; // relative address
-    RegB DAT; // fetched data
+    RegW TABS; // absolute address
+    RegW TREL; // relative address
+    RegB TDAT; // fetched data
 
     // storage
     Disk *disk; // disk
@@ -119,27 +71,34 @@ struct CPU {
     // attach memory to the CPU
     void Mount(const Disk &disk);
 
-    // Reset the CPU
-    void Reset();
+    // ---------- Reset / Interrupt ----------
 
-    // instruction functions
+    void Reset();
+    void IRQ();
+    void NMI();
+
+    // ---------- instruction functions ----------
+
     void BRK();
     void ORA();
     void XXX();
     void NOP();
     void ASL();
+    void ALA(); // unofficial, same as ASL, only for IMP mode
     void PHP();
     void CLC();
     void JSR();
     void BIT();
     void AND();
     void ROL();
+    void RLA(); // unofficial, same as ROL, only for IMP mode
     void PLP();
     void BMI();
     void SEC();
     void RTI();
     void EOR();
     void LSR();
+    void LRA(); // unofficial, same as LSR, only for IMP mode
     void PHA();
     void JMP();
     void BVC();
@@ -147,6 +106,7 @@ struct CPU {
     void RTS();
     void ADC();
     void ROR();
+    void RRA(); // unofficial, same as ROR, only for IMP mode
     void PLA();
     void BVS();
     void SEI();
@@ -180,4 +140,30 @@ struct CPU {
     void BEQ();
     void SED();
     void BPL();
+
+    // ---------- addressing mode functions ----------
+
+    void IMP();
+    void IMM();
+    void ZPG();
+    void ZPX();
+    void ZPY();
+    void REL();
+    void ABS();
+    void ABX();
+    void AXP(); // unofficial, same as ABX, only for STA
+    void ABY();
+    void AYP(); // unofficial, same as ABY, only for STA
+    void IND();
+    void IZX();
+    void IZY();
+    void IYP(); // unofficial, same as IZY, only for STA
+
+    // ---------- execute functions ----------
+
+    void Clock();
+
+    void Exec(const uint16_t &, const size_t &);
+
+    void BinToAsm(const Mem &, std::vector<std::string> &);
 };

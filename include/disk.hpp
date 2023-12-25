@@ -21,6 +21,9 @@ struct Disk {
     // CPU read 1 byte
     Byte ReadCPU(const uint16_t &addr);
 
+    // CPU write 1 byte
+    void WriteCPU(const uint16_t &addr, const Byte &data);
+
     // TODO PPU read 1 byte
     // Byte Read(const uint16_t &addr, PPU &ppu);
 };

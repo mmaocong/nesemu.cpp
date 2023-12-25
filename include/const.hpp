@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <vector>
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 using Byte = uint8_t;
 using Word = uint16_t;
