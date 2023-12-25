@@ -1,0 +1,5 @@
+#pragma once
+
+#define VERSION_MAJOR @NesEmu_VERSION_MAJOR@
+#define VERSION_MINOR @NesEmu_VERSION_MINOR@
+#define VERSION_PATCH @NesEmu_VERSION_PATCH@
