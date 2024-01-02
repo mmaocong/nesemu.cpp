@@ -7,14 +7,16 @@ set(SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cassette.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cpu.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_ins.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/disk.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/misc.cpp"
 )
 set(HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/cassette.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/const.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/cpu.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/disk.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/instruction.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/misc.hpp"
 )
 
 # Create the executable

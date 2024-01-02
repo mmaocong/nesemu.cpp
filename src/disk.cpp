@@ -48,10 +48,12 @@ Disk::Disk() : ram(CPU_MEMSIZE, 0), prg(0), chr(0) {}
 // Destructor
 Disk::~Disk() {}
 
+// TODO: log read access
 Byte Disk::ReadCPU(const uint16_t &addr) {
     AddrRangeCPU rg = addr_range_cpu(addr);
     switch (rg) {
     case RG_2000:
+        // NOTE: 2KB RAM
         return ram[addr & 0x07FF];
     case RG_4000:
         // NOTE: PPU registers are mirrored every 8 bytes i.e.
@@ -81,4 +83,25 @@ Byte Disk::ReadCPU(const uint16_t &addr) {
         break;
     }
     return 0;
+}
+
+// TODO: log write access
+void Disk::WriteCPU(const uint16_t &addr, const Byte &data) {
+    AddrRangeCPU rg = addr_range_cpu(addr);
+    switch (rg) {
+    case RG_2000:
+        // NOTE: 2KB RAM
+        ram[addr & 0x07FF] = data;
+        break;
+    case RG_4000:
+        // NOTE: PPU registers are mirrored every 8 bytes i.e.
+        // 0x2000 == 0x2008 == 0x2010 == ...
+        // 0x2001 == 0x2009 == 0x2011 == ...
+        // ...
+        // `addr & 0x2007` equals to `addr % 8 + 0x2000`
+        ram[addr & 0x2007] = data;
+        break;
+    default:
+        break;
+    }
 }
