@@ -13,7 +13,29 @@
 static inline uint16_t stack_addr(RegB rip) { return 0x0100 + rip; }
 
 // ----------------------------------------------------------------------------
-// instuction functions
+// NOP
+// ----------------------------------------------------------------------------
+
+// Capture illegal opcodes, functionally identical to NOP
+void CPU::XXX() {}
+
+// Instruction: No Operation
+//
+// TODO: potentially require an additional clock cycle
+void CPU::NOP() {}
+
+// Instruction: Test Bits
+void CPU::BIT() {
+    // fetch data from absolute address
+    Byte val = disk->ReadCPU(TABS);
+    // set flags
+    RF.SetZ(val & RA);
+    RF.SetN(val);
+    RF.flags.V = (val & (1 << 6)) > 0;
+}
+
+// ----------------------------------------------------------------------------
+// Interrupts
 // ----------------------------------------------------------------------------
 
 // Reset the 6502 into a known state, hard-wired inside the CPU.
@@ -122,6 +144,41 @@ void CPU::BRK() {
     PC = (hi << 8) | lo;
 }
 
+// Instruction: Return from Interrupt.
+void CPU::RTI() {
+    // pull status register from stack
+    SP++;
+    RF.reg = disk->ReadCPU(stack_addr(SP));
+
+    // unset flags
+    RF.flags.B = 0;
+    RF.flags.U = 0;
+
+    // pull program counter from stack
+    // NOTE: little endian
+    SP++;
+    PC = disk->ReadCPU(stack_addr(SP));
+    SP++;
+    PC |= disk->ReadCPU(stack_addr(SP)) << 8;
+}
+
+// ----------------------------------------------------------------------------
+// Bitwise
+// ----------------------------------------------------------------------------
+
+// Instruction: Bitwise Logic AND
+//
+// - A = A & M
+// - Flags: N, Z
+void CPU::AND() {
+    // fetch data from absolute address
+    Byte val = disk->ReadCPU(TABS);
+    RA &= val;
+    // set flags
+    RF.SetZ(RA);
+    RF.SetN(RA);
+}
+
 // Instruction: Bytewise Logical OR
 //
 // - A = A | M
@@ -136,59 +193,20 @@ void CPU::ORA() {
     RF.SetN(RA);
 }
 
-// Capture illegal opcodes, functionally identical to NOP
-void CPU::XXX() {}
-
-// Instruction: No Operation
+// Instruction: Bitwise Logic XOR.
 //
-// TODO: potentially require an additional clock cycle
-void CPU::NOP() {}
-
-// Instruction: Arithmetic Shift Left
-//
-// - A = C <- (A << 1) <- 0
-// - Flags: N, Z, C
-void CPU::ASL() {
-    // fetch data from absolute address and shift left
-    uint16_t val = disk->ReadCPU(TABS) << 1;
-    // set flags
-    RF.flags.C = (val & 0xFF00) != 0;
-    RF.SetZ(val);
-    RF.SetN(val);
-    // write data to absolute address
-    disk->WriteCPU(TABS, val & 0x00FF);
+// - A = A xor M
+// - Flags: N, Z
+void CPU::EOR() {
+    Byte val = disk->ReadCPU(TABS);
+    RA ^= val;
+    RF.SetZ(RA);
+    RF.SetN(RA);
 }
 
-// Instruction: Arithmetic Shift Left (IMP mode).
-// Same as ASL except that the result is stored in the accumulator
-void CPU::ALA() {
-    // fetch data from absolute address and shift left
-    uint16_t val = disk->ReadCPU(TABS) << 1;
-    // set flags
-    RF.flags.C = (val & 0xFF00) != 0;
-    RF.SetZ(val);
-    RF.SetN(val);
-    // store result in accumulator
-    RA = val & 0x00FF;
-}
-
-// Instruction: Push Status Register to Stack
-//
-// - status -> stack
-void CPU::PHP() {
-    // save flags
-    RF.flags.B = 1;
-    RF.flags.U = 1;
-    disk->WriteCPU(stack_addr(SP--), RF.reg);
-    // reset flags
-    RF.flags.B = 0;
-    RF.flags.U = 0;
-}
-
-// Instruction: Clear Carry Flag
-//
-// - C = 0
-void CPU::CLC() { RF.flags.C = 0; }
+// ----------------------------------------------------------------------------
+// Jump
+// ----------------------------------------------------------------------------
 
 // Instruction: Jump To Sub-Routine
 //
@@ -205,52 +223,38 @@ void CPU::JSR() {
     PC = TABS;
 }
 
-// TODO: name
-void CPU::BIT() {
-    // fetch data from absolute address
-    Byte val = disk->ReadCPU(TABS);
-    // set flags
-    RF.SetZ(val & RA);
-    RF.SetN(val);
-    RF.flags.V = (val & (1 << 6)) > 0;
+// Instruction: Return from Sub-Routine.
+void CPU::RTS() {
+    // pull program counter from stack
+    // NOTE: little endian
+    SP++;
+    PC = disk->ReadCPU(stack_addr(SP));
+    SP++;
+    PC |= disk->ReadCPU(stack_addr(SP)) << 8;
+    // increment program counter so that it points to the next instruction
+    PC++;
 }
 
-// Instruction: Bitwise Logic AND
+// Instruction: Jump To Location.
 //
-// - A = A & M
-// - Flags: N, Z
-void CPU::AND() {
-    // fetch data from absolute address
-    Byte val = disk->ReadCPU(TABS);
-    RA &= val;
-    // set flags
-    RF.SetZ(RA);
-    RF.SetN(RA);
-}
+// - PC = address
+void CPU::JMP() { PC = TABS; }
 
-// Instruction: Rotate Left
-void CPU::ROL() {
-    // fetch data from absolute address and shift left
-    uint16_t val = disk->ReadCPU(TABS) << 1;
-    // set flags
-    RF.flags.C = (val & 0xFF00) != 0;
-    RF.SetZ(val);
-    RF.SetN(val);
-    // write data to absolute address
-    disk->WriteCPU(TABS, val & 0x00FF);
-}
+// ----------------------------------------------------------------------------
+// Stack
+// ----------------------------------------------------------------------------
 
-// Instruction: Rotate Left (IMP mode).
-// Same as ROL except that the result is stored in the accumulator
-void CPU::RLA() {
-    // fetch data from absolute address and shift left
-    uint16_t val = disk->ReadCPU(TABS) << 1;
-    // set flags
-    RF.flags.C = (val & 0xFF00) != 0;
-    RF.SetZ(val);
-    RF.SetN(val);
-    // store result in accumulator
-    RA = val & 0x00FF;
+// Instruction: Push Status Register to Stack
+//
+// - status -> stack
+void CPU::PHP() {
+    // save flags
+    RF.flags.B = 1;
+    RF.flags.U = 1;
+    disk->WriteCPU(stack_addr(SP--), RF.reg);
+    // reset flags
+    RF.flags.B = 0;
+    RF.flags.U = 0;
 }
 
 // Instruction: Pop Status Register off Stack.
@@ -262,7 +266,33 @@ void CPU::PLP() {
     RF.reg = disk->ReadCPU(stack_addr(SP));
     // reset flags
     RF.flags.U = 1;
+    // NOTE: added to align with the nestest
+    RF.flags.B = 0;
 }
+
+// Instruction: Push Accumulator to Stack.
+//
+// - A -> stack
+void CPU::PHA() {
+    // push accumulator to stack
+    disk->WriteCPU(stack_addr(SP--), RA);
+}
+
+// Instruction: Pop Accumulator off Stack
+// Function:    A <- stack
+// Flags Out:   N, Z
+void CPU::PLA() {
+    // pull accumulator from stack
+    SP++;
+    RA = disk->ReadCPU(stack_addr(SP));
+    // set flags
+    RF.SetZ(RA);
+    RF.SetN(RA);
+}
+
+// ----------------------------------------------------------------------------
+// Branching
+// ----------------------------------------------------------------------------
 
 // Instruction: Branch if Negative.
 //
@@ -279,85 +309,6 @@ void CPU::BMI() {
         PC = TABS;
     }
 }
-
-// Instruction: Set Carry Flag.
-//
-// - C = 1
-void CPU::SEC() { RF.flags.C = 1; }
-
-// Instruction: Return from Interrupt.
-void CPU::RTI() {
-    // pull status register from stack
-    SP++;
-    RF.reg = disk->ReadCPU(stack_addr(SP));
-
-    // flip B and U flags
-    RF.flags.B = ~RF.flags.B;
-    RF.flags.U = ~RF.flags.U;
-
-    // pull program counter from stack
-    // NOTE: little endian
-    SP++;
-    PC = disk->ReadCPU(stack_addr(SP));
-    SP++;
-    PC |= disk->ReadCPU(stack_addr(SP)) << 8;
-    PC++;
-}
-
-// Instruction: Bitwise Logic XOR.
-//
-// - A = A xor M
-// - Flags: N, Z
-void CPU::EOR() {
-    Byte val = disk->ReadCPU(TABS);
-    RA ^= val;
-    RF.SetZ(RA);
-    RF.SetN(RA);
-}
-
-// Instruction: Logical Shift Right.
-void CPU::LSR() {
-    // fetch data from absolute address
-    uint16_t val = disk->ReadCPU(TABS);
-    // set C flag
-    RF.flags.C = (val & 0x0001) != 0;
-    // shift right
-    val >>= 1;
-    // set flags
-    RF.SetZ(val);
-    RF.SetN(val);
-    // write data to absolute address
-    disk->WriteCPU(TABS, val & 0x00FF);
-}
-
-// Instruction: Logical Shift Right (IMP mode).
-// Same as LSR except that the result is stored in the accumulator
-void CPU::LRA() {
-    // fetch data from absolute address
-    uint16_t val = disk->ReadCPU(TABS);
-    // set C flag
-    RF.flags.C = (val & 0x0001) != 0;
-    // shift right
-    val >>= 1;
-    // set flags
-    RF.SetZ(val);
-    RF.SetN(val);
-    // store result in accumulator
-    RA = val & 0x00FF;
-}
-
-// Instruction: Push Accumulator to Stack.
-//
-// - A -> stack
-void CPU::PHA() {
-    // push accumulator to stack
-    disk->WriteCPU(stack_addr(SP--), RA);
-}
-
-// Instruction: Jump To Location.
-//
-// - PC = address
-void CPU::JMP() { PC = TABS; }
 
 // Instruction: Branch if Overflow Clear.
 //
@@ -376,22 +327,111 @@ void CPU::BVC() {
     }
 }
 
-// Instruction: Disable Interrupts / Clear Interrupt Flag.
+// Instruction: Branch if Overflow Set.
 //
-// - I = 0
-void CPU::CLI() { RF.flags.I = 0; }
-
-// Instruction: Return from Subroutine.
-void CPU::RTS() {
-    // pull program counter from stack
-    // NOTE: little endian
-    SP++;
-    PC = disk->ReadCPU(stack_addr(SP));
-    SP++;
-    PC |= disk->ReadCPU(stack_addr(SP)) << 8;
-    // increment program counter so that it points to the next instruction
-    PC++;
+// PC := address, if V = 1
+void CPU::BVS() {
+    if (RF.flags.V == 1) {
+        // add extra cycle
+        cycles++;
+        // set absolute address
+        TABS = TREL + PC;
+        // If page changed, add extra cycle
+        if ((TABS & 0xFF00) != (PC & 0xFF00))
+            cycles++;
+        // set program counter
+        PC = TABS;
+    }
 }
+
+// Instruction: Branch if Carry Clear.
+//
+// - PC := address, if C == 0
+void CPU::BCC() {
+    if (RF.flags.C == 0) {
+        // add extra cycle
+        cycles++;
+        // set absolute address
+        TABS = TREL + PC;
+        // If page changed, add extra cycle
+        if ((TABS & 0xFF00) != (PC & 0xFF00))
+            cycles++;
+        // set program counter
+        PC = TABS;
+    }
+}
+
+// Instruction: Branch if Carry Set.
+//
+// - PC := address, if C == 1
+void CPU::BCS() {
+    if (RF.flags.C == 1) {
+        // add extra cycle
+        cycles++;
+        // set absolute address
+        TABS = TREL + PC;
+        // If page changed, add extra cycle
+        if ((TABS & 0xFF00) != (PC & 0xFF00))
+            cycles++;
+        // set program counter
+        PC = TABS;
+    }
+}
+
+// Instruction: Branch if Not Equal
+//
+// PC := address, if Z == 0
+void CPU::BNE() {
+    if (RF.flags.Z == 0) {
+        // add extra cycle
+        cycles++;
+        // set absolute address
+        TABS = TREL + PC;
+        // If page changed, add extra cycle
+        if ((TABS & 0xFF00) != (PC & 0xFF00))
+            cycles++;
+        // set program counter
+        PC = TABS;
+    }
+}
+
+// Instruction: Branch if Equal
+//
+// - PC := address, if Z == 1
+void CPU::BEQ() {
+    if (RF.flags.Z == 1) {
+        // add extra cycle
+        cycles++;
+        // set absolute address
+        TABS = TREL + PC;
+        // If page changed, add extra cycle
+        if ((TABS & 0xFF00) != (PC & 0xFF00))
+            cycles++;
+        // set program counter
+        PC = TABS;
+    }
+}
+
+// Instruction: Branch if Positive.
+//
+// - PC := address, if N == 0
+void CPU::BPL() {
+    if (RF.flags.N == 0) {
+        // add extra cycle
+        cycles++;
+        // set absolute address
+        TABS = TREL + PC;
+        // If page changed, add extra cycle
+        if ((TABS & 0xFF00) != (PC & 0xFF00))
+            cycles++;
+        // set program counter
+        PC = TABS;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Add & Subtract
+// ----------------------------------------------------------------------------
 
 // Instruction: Add with Carry.
 //
@@ -431,6 +471,118 @@ void CPU::ADC() {
     RA = res & 0x00FF;
 }
 
+// Instruction: Subtract with Borrow.
+//
+// - A = A - M - (1 - C) = A + (-M - 1) + C
+// - Flags: C, V, N, Z
+void CPU::SBC() {
+    // fetch data from absolute address, and invert the bottom 8 bits
+    // val := -M - 1
+    uint16_t val = disk->ReadCPU(TABS) ^ 0x00FF;
+    // R = A + (-M - 1) + C
+    uint16_t res = (uint16_t)RA + val + (uint16_t)RF.flags.C;
+    // set flags
+    RF.flags.C = (res & 0xFF00) != 0;
+    RF.SetZ(res);
+    RF.SetN(res);
+    RF.flags.V = ((res ^ (uint16_t)RA) & (res ^ val) & (1 << 7)) != 0;
+    // store result in accumulator
+    RA = res & 0x00FF;
+}
+
+// ----------------------------------------------------------------------------
+// Shift
+// ----------------------------------------------------------------------------
+
+// Instruction: Logical Shift Right.
+void CPU::LSR() {
+    // fetch data from absolute address
+    uint16_t val = disk->ReadCPU(TABS);
+    // set C flag
+    RF.flags.C = (val & 0x0001) != 0;
+    // shift right
+    val >>= 1;
+    // set flags
+    RF.SetZ(val);
+    RF.SetN(val);
+    // write data to absolute address
+    disk->WriteCPU(TABS, val & 0x00FF);
+}
+
+// Instruction: Logical Shift Right (IMP mode).
+// Same as LSR except that the result is stored in the accumulator
+void CPU::LRA() {
+    // fetch data from absolute address
+    uint16_t val = disk->ReadCPU(TABS);
+    // set C flag
+    RF.flags.C = (val & 0x0001) != 0;
+    // shift right
+    val >>= 1;
+    // set flags
+    RF.SetZ(val);
+    RF.SetN(val);
+    // store result in accumulator
+    RA = val & 0x00FF;
+}
+
+// Instruction: Arithmetic Shift Left
+//
+// - A = C <- (A << 1) <- 0
+// - Flags: N, Z, C
+void CPU::ASL() {
+    // fetch data from absolute address and shift left
+    uint16_t val = disk->ReadCPU(TABS) << 1;
+    // set flags
+    RF.flags.C = (val & 0xFF00) != 0;
+    RF.SetZ(val);
+    RF.SetN(val);
+    // write data to absolute address
+    disk->WriteCPU(TABS, val & 0x00FF);
+}
+
+// Instruction: Arithmetic Shift Left (IMP mode).
+// Same as ASL except that the result is stored in the accumulator
+void CPU::ALA() {
+    // fetch data from absolute address and shift left
+    uint16_t val = disk->ReadCPU(TABS) << 1;
+    // set flags
+    RF.flags.C = (val & 0xFF00) != 0;
+    RF.SetZ(val);
+    RF.SetN(val);
+    // store result in accumulator
+    RA = val & 0x00FF;
+}
+
+// ----------------------------------------------------------------------------
+// Rotate
+// ----------------------------------------------------------------------------
+
+// Instruction: Rotate Left
+void CPU::ROL() {
+    // fetch data from absolute address, rotate left, and set C flag
+    // NOTE: C flag is set to the old bit 7
+    uint16_t val = disk->ReadCPU(TABS) << 1 | (uint16_t)RF.flags.C;
+    // set flags
+    RF.flags.C = (val & 0xFF00) != 0;
+    RF.SetZ(val);
+    RF.SetN(val);
+    // write data to absolute address
+    disk->WriteCPU(TABS, val & 0x00FF);
+}
+
+// Instruction: Rotate Left (IMP mode).
+// Same as ROL except that the result is stored in the accumulator
+void CPU::RLA() {
+    // f
+    uint16_t val = disk->ReadCPU(TABS) << 1 | (uint16_t)RF.flags.C;
+    // set flags
+    RF.flags.C = (val & 0xFF00) != 0;
+    RF.SetZ(val);
+    RF.SetN(val);
+    // store result in accumulator
+    RA = val & 0x00FF;
+}
+
 // Instruction: ROtate Right.
 //
 // - The Carry is shifted into bit 7
@@ -463,39 +615,9 @@ void CPU::RRA() {
     RA = res & 0x00FF;
 }
 
-// Instruction: Pop Accumulator off Stack
-// Function:    A <- stack
-// Flags Out:   N, Z
-void CPU::PLA() {
-    // pull accumulator from stack
-    SP++;
-    RA = disk->ReadCPU(stack_addr(SP));
-    // set flags
-    RF.SetZ(RA);
-    RF.SetN(RA);
-}
-
-// Instruction: Branch if Overflow Set.
-//
-// PC := address, if V = 1
-void CPU::BVS() {
-    if (RF.flags.V == 1) {
-        // add extra cycle
-        cycles++;
-        // set absolute address
-        TABS = TREL + PC;
-        // If page changed, add extra cycle
-        if ((TABS & 0xFF00) != (PC & 0xFF00))
-            cycles++;
-        // set program counter
-        PC = TABS;
-    }
-}
-
-// Instruction: Set Interrupt Flag / Enable Interrupts.
-//
-// - I := 1
-void CPU::SEI() { RF.flags.I = 1; }
+// ----------------------------------------------------------------------------
+// Save / Load Registers
+// ----------------------------------------------------------------------------
 
 // Instruction: Store Accumulator at Address.
 //
@@ -512,16 +634,6 @@ void CPU::STY() { disk->WriteCPU(TABS, RY); }
 // - M = X
 void CPU::STX() { disk->WriteCPU(TABS, RX); }
 
-// Instruction: Decrement Y Register.
-//
-// - Y := Y - 1
-// - Flags: N, Z
-void CPU::DEY() {
-    RY--;
-    RF.SetZ(RY);
-    RF.SetN(RY);
-}
-
 // Instruction: Transfer X Register to Accumulator.
 //
 // - A = X
@@ -530,23 +642,6 @@ void CPU::TXA() {
     RA = RX;
     RF.SetZ(RA);
     RF.SetN(RA);
-}
-
-// Instruction: Branch if Carry Clear.
-//
-// - PC := address, if C == 0
-void CPU::BCC() {
-    if (RF.flags.C == 0) {
-        // add extra cycle
-        cycles++;
-        // set absolute address
-        TABS = TREL + PC;
-        // If page changed, add extra cycle
-        if ((TABS & 0xFF00) != (PC & 0xFF00))
-            cycles++;
-        // set program counter
-        PC = TABS;
-    }
 }
 
 // Instruction: Transfer Y Register to Accumulator.
@@ -614,28 +709,6 @@ void CPU::TAX() {
     RF.SetN(RX);
 }
 
-// Instruction: Branch if Carry Set.
-//
-// - PC := address, if C == 1
-void CPU::BCS() {
-    if (RF.flags.C == 1) {
-        // add extra cycle
-        cycles++;
-        // set absolute address
-        TABS = TREL + PC;
-        // If page changed, add extra cycle
-        if ((TABS & 0xFF00) != (PC & 0xFF00))
-            cycles++;
-        // set program counter
-        PC = TABS;
-    }
-}
-
-// Instruction: Clear Overflow Flag.
-//
-// - V := 0
-void CPU::CLV() { RF.flags.V = 0; }
-
 // Instruction: Transfer Stack Pointer to X Register.
 //
 // - X := SP
@@ -645,6 +718,10 @@ void CPU::TSX() {
     RF.SetZ(RX);
     RF.SetN(RX);
 }
+
+// ----------------------------------------------------------------------------
+// Compare
+// ----------------------------------------------------------------------------
 
 // Instruction: Compare Y Register.
 //
@@ -676,6 +753,25 @@ void CPU::CMP() {
     RF.SetN(tmp);
 }
 
+// Instruction: Compare X Register.
+//
+// - C := X >= M
+// - Z := (X - M) == 0
+// - N := (X - M) & (1 << 7)
+void CPU::CPX() {
+    // fetch data from absolute address
+    Byte val = disk->ReadCPU(TABS);
+    uint16_t tmp = (uint16_t)RX - (uint16_t)val;
+    // set flags
+    RF.flags.C = RX >= val;
+    RF.SetZ(tmp);
+    RF.SetN(tmp);
+}
+
+// ----------------------------------------------------------------------------
+// Dec-Inc
+// ----------------------------------------------------------------------------
+
 // Instruction: Decrement Value at Memory Location.
 //
 // - M = M - 1
@@ -690,6 +786,32 @@ void CPU::DEC() {
     RF.SetN(val);
     // write data to absolute address
     disk->WriteCPU(TABS, val);
+}
+
+// Instruction: Increment Value at Memory Location.
+//
+// - M := M + 1
+// - Flags: N, Z
+void CPU::INC() {
+    // fetch data from absolute address
+    Byte val = disk->ReadCPU(TABS);
+    // increment
+    val++;
+    // set flags
+    RF.SetZ(val);
+    RF.SetN(val);
+    // write data to absolute address
+    disk->WriteCPU(TABS, val);
+}
+
+// Instruction: Decrement Y Register.
+//
+// - Y := Y - 1
+// - Flags: N, Z
+void CPU::DEY() {
+    RY--;
+    RF.SetZ(RY);
+    RF.SetN(RY);
 }
 
 // Instruction: Increment Y Register.
@@ -712,78 +834,6 @@ void CPU::DEX() {
     RF.SetN(RX);
 }
 
-// Instruction: Branch if Not Equal
-//
-// PC := address, if Z == 0
-void CPU::BNE() {
-    if (RF.flags.Z == 0) {
-        // add extra cycle
-        cycles++;
-        // set absolute address
-        TABS = TREL + PC;
-        // If page changed, add extra cycle
-        if ((TABS & 0xFF00) != (PC & 0xFF00))
-            cycles++;
-        // set program counter
-        PC = TABS;
-    }
-}
-
-// Instruction: Clear Decimal Flag.
-//
-// D := 0
-void CPU::CLD() { RF.flags.D = 0; }
-
-// Instruction: Compare X Register.
-//
-// - C := X >= M
-// - Z := (X - M) == 0
-// - N := (X - M) & (1 << 7)
-void CPU::CPX() {
-    // fetch data from absolute address
-    Byte val = disk->ReadCPU(TABS);
-    uint16_t tmp = (uint16_t)RX - (uint16_t)val;
-    // set flags
-    RF.flags.C = RX >= val;
-    RF.SetZ(tmp);
-    RF.SetN(tmp);
-}
-
-// Instruction: Subtract with Borrow.
-//
-// - A = A - M - (1 - C) = A + (-M - 1) + C
-// - Flags: C, V, N, Z
-void CPU::SBC() {
-    // fetch data from absolute address, and invert the bottom 8 bits
-    // val := -M - 1
-    uint16_t val = disk->ReadCPU(TABS) ^ 0x00FF;
-    // R = A + (-M - 1) + C
-    uint16_t res = (uint16_t)RA + val + (uint16_t)RF.flags.C;
-    // set flags
-    RF.flags.C = (res & 0xFF00) != 0;
-    RF.SetZ(res);
-    RF.SetN(res);
-    RF.flags.V = ((((uint16_t)RA ^ val) & (res ^ val)) & (1 << 7)) != 0;
-    // store result in accumulator
-    RA = res & 0x00FF;
-}
-
-// Instruction: Increment Value at Memory Location.
-//
-// - M := M + 1
-// - Flags: N, Z
-void CPU::INC() {
-    // fetch data from absolute address
-    Byte val = disk->ReadCPU(TABS);
-    // increment
-    val++;
-    // set flags
-    RF.SetZ(val);
-    RF.SetN(val);
-    // write data to absolute address
-    disk->WriteCPU(TABS, val);
-}
-
 // Instruction: Increment X Register.
 //
 // - X := X + 1
@@ -794,219 +844,41 @@ void CPU::INX() {
     RF.SetN(RX);
 }
 
-// Instruction: Branch if Equal
+// ----------------------------------------------------------------------------
+// Set / Clear Flags
+// ----------------------------------------------------------------------------
+
+// Instruction: Clear Carry Flag
 //
-// - PC := address, if Z == 1
-void CPU::BEQ() {
-    if (RF.flags.Z == 1) {
-        // add extra cycle
-        cycles++;
-        // set absolute address
-        TABS = TREL + PC;
-        // If page changed, add extra cycle
-        if ((TABS & 0xFF00) != (PC & 0xFF00))
-            cycles++;
-        // set program counter
-        PC = TABS;
-    }
-}
+// - C = 0
+void CPU::CLC() { RF.flags.C = 0; }
+
+// Instruction: Clear Decimal Flag.
+//
+// D := 0
+void CPU::CLD() { RF.flags.D = 0; }
+
+// Instruction: Clear Overflow Flag.
+//
+// - V := 0
+void CPU::CLV() { RF.flags.V = 0; }
+
+// Instruction: Disable Interrupts / Clear Interrupt Flag.
+//
+// - I = 0
+void CPU::CLI() { RF.flags.I = 0; }
+
+// Instruction: Set Carry Flag.
+//
+// - C = 1
+void CPU::SEC() { RF.flags.C = 1; }
+
+// Instruction: Set Interrupt Flag / Enable Interrupts.
+//
+// - I := 1
+void CPU::SEI() { RF.flags.I = 1; }
 
 // Instruction: Set Decimal Flag.
 //
 // - D := 1
 void CPU::SED() { RF.flags.D = 1; }
-
-// Instruction: Branch if Positive.
-//
-// - PC := address, if N == 0
-void CPU::BPL() {
-    if (RF.flags.N == 0) {
-        // add extra cycle
-        cycles++;
-        // set absolute address
-        TABS = TREL + PC;
-        // If page changed, add extra cycle
-        if ((TABS & 0xFF00) != (PC & 0xFF00))
-            cycles++;
-        // set program counter
-        PC = TABS;
-    }
-}
-
-// ----------------------------------------------------------------------------
-// Addressing modes
-// ----------------------------------------------------------------------------
-
-// Addressing mode: Implied.
-void CPU::IMP() { TDAT = RA; }
-
-// Addressing mode: Immediate.
-//
-// - Expect the next byte to be used as a value
-// - Prep the read address to point to the next byte
-void CPU::IMM() { TABS = PC++; }
-
-// Addressing mode: Zero Page.
-//
-// - Allows to absolutely address a location in the 1st 0xFF bytes of address
-//   range.
-// - This only requires one byte instead of the usual two.
-void CPU::ZPG() {
-    TABS = disk->ReadCPU(PC++);
-    TABS &= 0x00FF;
-}
-
-// Addressing mode: Zero Page with X Register Offset.
-//
-// - The same as ZPG, but the X Register is added to the supplied single byte
-//   address.
-// - Useful for iterating through ranges within the first page.
-void CPU::ZPX() {
-    TABS = disk->ReadCPU(PC++) + RX;
-    TABS &= 0x00FF;
-}
-
-// Addressing mode: Zero Page with Y Register Offset.
-// - The same as ZPG, but the Y Register is added to the supplied single byte
-//   address.
-// - Useful for iterating through ranges within the first page.
-void CPU::ZPY() {
-    TABS = disk->ReadCPU(PC++) + RY;
-    TABS &= 0x00FF;
-}
-
-// Addressing mode: Relative.
-//
-// - Exclusive to branch instructions.
-// - The address must reside within -128 to +127 of the branch instruction,
-//   i.e. CANNOT directly branch to any address in the addressable range.
-void CPU::REL() {
-    TREL = disk->ReadCPU(PC++);
-    // Extend the sign if the value is negative
-    if (TREL & (1 << 7))
-        TREL |= 0xFF00;
-}
-
-// Addressing mode: Absolute.
-//
-// A full 16-bit address is loaded and used.
-void CPU::ABS() {
-    uint16_t lo = disk->ReadCPU(PC++);
-    uint16_t hi = disk->ReadCPU(PC++);
-    TABS = (hi << 8) | lo;
-}
-
-// Addressing mode: Absolute with X Register Offset.
-//
-// - Same as ABS, but the X Register is added to the supplied two byte address.
-// - If the resulting address changes the page, an additional clock cycle is
-//   required
-// - Corresponding Instruction: ORA, AND, EOR, ADC, LDY, LDA, CMP, SBC
-void CPU::ABX() {
-    uint16_t lo = disk->ReadCPU(PC++);
-    uint16_t hi = disk->ReadCPU(PC++);
-    TABS = (hi << 8) | lo;
-    TABS += RX;
-
-    if ((TABS & 0xFF00) != (hi << 8))
-        cycles++;
-}
-
-// Addressing mode: Absolute with X Register Offset (Plain Version).
-//
-// Same as ABX, but only used by LDX, and does not require the additional clock
-//
-// Corresponding Instruction: ASL, ROL, LSR, ROR, STA, DEC, INC
-void CPU::AXP() {
-    uint16_t lo = disk->ReadCPU(PC++);
-    uint16_t hi = disk->ReadCPU(PC++);
-    TABS = (hi << 8) | lo;
-    TABS += RX;
-}
-
-// Addressing mode: Absolute with Y Register Offset.
-//
-// - Same as ABS, but the Y Register is added to the supplied two byte address.
-// - If the resulting address changes the page, an additional clock cycle is
-//   required
-// - Corresponding Instruction: ORA, AND, EOR, ADC, LDA, LDX, CMP, SBC
-void CPU::ABY() {
-    uint16_t lo = disk->ReadCPU(PC++);
-    uint16_t hi = disk->ReadCPU(PC++);
-    TABS = (hi << 8) | lo;
-    TABS += RY;
-
-    if ((TABS & 0xFF00) != (hi << 8))
-        cycles++;
-}
-
-// Addressing mode: Absolute with Y Register Offset (Plain Version).
-//
-// Same as ABY, but only used by STA, and does not require the additional clock
-void CPU::AYP() {
-    uint16_t lo = disk->ReadCPU(PC++);
-    uint16_t hi = disk->ReadCPU(PC++);
-    TABS = (hi << 8) | lo;
-    TABS += RY;
-}
-
-// Addressing mode: Indirect.
-//
-// - The supplied 16-bit address is read to get the actual 16-bit address.
-// - NOTE: BUG in the hardware.
-//   If the low byte of the supplied address is 0xFF, then to read the high
-//   byte of the actual address we need to cross a page boundary.
-//   This does NOT actually work on the chip as designed, instead it wraps
-//   back around in the same page, yielding an invalid actual address
-void CPU::IND() {
-    uint16_t lo = disk->ReadCPU(PC++);
-    uint16_t hi = disk->ReadCPU(PC++);
-    uint16_t ptr = (hi << 8) | lo;
-
-    if (lo == 0x00FF)
-        // simulate page boundary hardware bug
-        TABS = (disk->ReadCPU(ptr & 0xFF00) << 8) | disk->ReadCPU(ptr);
-    else
-        // normal operation
-        TABS = (disk->ReadCPU(ptr + 1) << 8) | disk->ReadCPU(ptr);
-}
-
-// Addressing mode: Indexed Indirect with X Register Offset.
-//
-// - The supplied 8-bit address is offset by X Register to index a location in
-//   page 0x00.
-// - The actual 16-bit address is read from this location
-void CPU::IZX() {
-    uint16_t ptr = disk->ReadCPU(PC++);
-    uint8_t lo = disk->ReadCPU((ptr + (uint16_t)RX) & 0x00FF);
-    uint8_t hi = disk->ReadCPU((ptr + (uint16_t)RX + 1) & 0x00FF);
-    TABS = (hi << 8) | lo;
-}
-
-// Addressing mode: Indirect Indexed with Y Register Offset.
-//
-// - The supplied 8-bit address indexes a location in page 0x00.
-// - From here the actual 16-bit address is read, and the Y Register is added
-//   to it to offset it.
-// - If the offset causes a change in page then an additional clock cycle is
-//   required.
-// - Corresponding Instruction: ORA, AND, EOR, ADC, LDA, CMP, SBC
-void CPU::IZY() {
-    uint16_t ptr = disk->ReadCPU(PC++);
-    uint8_t lo = disk->ReadCPU(ptr & 0x00FF);
-    uint8_t hi = disk->ReadCPU((ptr + 1) & 0x00FF);
-    TABS = ((hi << 8) | lo) + (uint16_t)RY;
-
-    if ((TABS & 0xFF00) != (hi << 8))
-        cycles++;
-}
-
-// Addressing mode: Indexed Indirect with Y Register Offset (Plain Version).
-//
-// Same as IZY, but only used by STA, and does not require the additional clock
-void CPU::IYP() {
-    uint16_t ptr = disk->ReadCPU(PC++);
-    uint8_t lo = disk->ReadCPU(ptr & 0x00FF);
-    uint8_t hi = disk->ReadCPU((ptr + 1) & 0x00FF);
-    TABS = ((hi << 8) | lo) + (uint16_t)RY;
-}
