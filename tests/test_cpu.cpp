@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 
-#include "cassette.hpp"
 #include "cpu.hpp"
 
 // Test CPU by running nestest.nes and comparing the registers and cycles.
@@ -11,13 +10,10 @@
 //       contains many illegal opcodes that are not implemented
 TEST(CPUTest, NesLogCompare) {
 
-    Mem mem = Mem(CPU_MEMSIZE);
     CPU cpu = CPU();
 
     Disk disk = Disk();
-
-    CHeader head = Cassette::Load("./data/nestest.nes", disk.prg, disk.chr);
-
+    disk.Attach("./data/nestest.nes");
     cpu.Mount(disk);
 
     cpu.Reset();

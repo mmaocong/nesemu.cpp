@@ -1,107 +1,96 @@
 #include "disk.hpp"
 #include "const.hpp"
+#include "neshdr.hpp"
 
-// ----------------------------------------------------------------------------
-// helper functions
-// ----------------------------------------------------------------------------
+#include <fstream>
+#include <iostream>
 
-// address range check for CPU
-enum AddrRangeCPU : uint8_t {
-    RG_NONE = 0, // invalid
-
-    // RAM space
-    RG_2000 = 1, // 0x0000 - 0x1fff, main RAM
-    RG_4000 = 2, // 0x2000 - 0x3fff, PPU registers
-    RG_4020 = 3, // 0x4000 - 0x401f, APU
-
-    // cartridge space
-    RG_6000 = 4, // 0x4020 - 0x5fff, expansion ROM
-    RG_8000 = 5, // 0x6000 - 0x7fff, expansion RAM
-    RG_G000 = 6, // 0x8000 - 0xffff, PRG-ROM
-};
-
-static constexpr AddrRangeCPU addr_range_cpu(const uint16_t &addr) {
-    if (addr < 0x2000) {
-        return RG_2000;
-    } else if (addr < 0x4000) {
-        return RG_4000;
-    } else if (addr < 0x4020) {
-        return RG_4020;
-    } else if (addr < 0x6000) {
-        return RG_6000;
-    } else if (addr < 0x8000) {
-        return RG_8000;
-    } else if (addr <= 0xFFFF) {
-        return RG_G000;
-    } else {
-        return RG_NONE;
-    }
-}
+// Constant $4E $45 $53 $1A (ASCII "NES" followed by MS-DOS end-of-file)
+static constexpr char NES_NAME[4] = {0x4E, 0x45, 0x53, 0x1A};
 
 // ----------------------------------------------------------------------------
 // Disk Class
 // ----------------------------------------------------------------------------
 
 // Constructor
-Disk::Disk() : ram(CPU_MEMSIZE, 0), prg(0), chr(0) {}
+Disk::Disk()
+    : ram(kRAMSize, 0), vrm(kVRAMSize), pal(kPaletteSize), prg(0), chr(0) {}
 
 // Destructor
 Disk::~Disk() {}
 
-// TODO: log read access
-Byte Disk::ReadCPU(const uint16_t &addr) {
-    AddrRangeCPU rg = addr_range_cpu(addr);
-    switch (rg) {
-    case RG_2000:
-        // NOTE: 2KB RAM
-        return ram[addr & 0x07FF];
-    case RG_4000:
-        // NOTE: PPU registers are mirrored every 8 bytes i.e.
-        // 0x2000 == 0x2008 == 0x2010 == ...
-        // 0x2001 == 0x2009 == 0x2011 == ...
-        // ...
-        // `addr & 0x2007` equals to `addr % 8 + 0x2000`
-        return ram[addr & 0x2007];
-    case RG_4020:
-        // TODO: verify this
-        return ram[addr & 0x1F];
-    case RG_6000:
-        // not implemented
+void Disk::Print() {
+    std::cout << "PRG-ROM:" << prg_kb << "KB; CHR-ROM:" << chr_kb << "KB"
+              << std::endl;
+    std::cout << "Mirroring:";
+    switch (mirror) {
+    case MirrorMode::HORIZ:
+        std::cout << "Horizontal" << std::endl;
         break;
-    case RG_8000:
-        // not implemented
+    case MirrorMode::VERT:
+        std::cout << "Vertical" << std::endl;
         break;
-    case RG_G000:
-        if (prg.size() < 0x8000) {
-            // 16KB PRG-ROM
-            return prg[(addr - 0x8000) & 0x3FFF];
-        } else {
-            // 32KB PRG-ROM
-            return prg[addr - 0x8000];
-        }
+    case MirrorMode::FOUR:
+        std::cout << "Four" << std::endl;
+        break;
     default:
-        break;
+        std::cout << "Unknown" << std::endl;
     }
-    return 0;
 }
 
-// TODO: log write access
-void Disk::WriteCPU(const uint16_t &addr, const Byte &data) {
-    AddrRangeCPU rg = addr_range_cpu(addr);
-    switch (rg) {
-    case RG_2000:
-        // NOTE: 2KB RAM
-        ram[addr & 0x07FF] = data;
-        break;
-    case RG_4000:
-        // NOTE: PPU registers are mirrored every 8 bytes i.e.
-        // 0x2000 == 0x2008 == 0x2010 == ...
-        // 0x2001 == 0x2009 == 0x2011 == ...
-        // ...
-        // `addr & 0x2007` equals to `addr % 8 + 0x2000`
-        ram[addr & 0x2007] = data;
-        break;
-    default:
-        break;
+void Disk::Attach(const std::string &cart) {
+
+    std::ifstream file(cart, std::ios::binary);
+
+    NesHdr header;
+
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open file: " + cart);
+    }
+
+    if (!file.read((char *)&header, sizeof(NesHdr)) ||
+        std::memcmp(header.name, NES_NAME, 4) != 0) {
+        throw std::runtime_error("Failed to read header");
+    }
+
+    // If a "trainer" exists we just need to read past it before we get to the
+    // good stuff
+    if (header.trainer)
+        file.seekg(512, std::ios_base::cur);
+
+    // determine mirroring mode
+    if (header.four) {
+        mirror = MirrorMode::FOUR;
+    } else if (header.vertical) {
+        mirror = MirrorMode::VERT;
+    } else {
+        mirror = MirrorMode::HORIZ;
+    }
+
+    // update PRG/CHR size
+    prg_kb = header.n_chunk_prg * 16; // 16kb chunks
+    chr_kb = header.n_chunk_chr * 8;  // 8kb chunks
+
+    // restrict for now:
+    // - 32KB PRG-ROM
+    // -  8KB CHR-ROM
+    if (prg_kb > 32) {
+        throw std::runtime_error(
+            "Unsupported PRG-ROM size: " + std::to_string(prg_kb) + "KB");
+    }
+    if (chr_kb > 8) {
+        throw std::runtime_error(
+            "Unsupported CHR-ROM size: " + std::to_string(chr_kb) + "KB");
+    }
+
+    // read prg rom
+    prg.resize(prg_kb * 1024);
+    chr.resize(chr_kb * 1024);
+
+    if (!file.read((char *)prg.data(), prg.size())) {
+        throw std::runtime_error("Failed to read prg rom");
+    }
+    if (!file.read((char *)chr.data(), chr.size())) {
+        throw std::runtime_error("Failed to read chr rom");
     }
 }

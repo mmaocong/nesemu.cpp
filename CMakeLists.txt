@@ -7,19 +7,20 @@ find_package(GTest CONFIG REQUIRED)
 # define sources and headers
 set(SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/cassette.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cpu.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_addr.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_ins.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/disk.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/disk_rw.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/misc.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/neshdr.cpp"
 )
 set(HEADERS
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/cassette.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/const.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/cpu.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/disk.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/misc.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/neshdr.hpp"
 )
 
 # Create the executable
@@ -48,11 +49,12 @@ target_include_directories(NesEmu PRIVATE
 enable_testing()
 add_executable(NETest
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cpu.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/cassette.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cpu.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_addr.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_ins.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/disk.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/disk_rw.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/neshdr.cpp"
 )
 set_target_properties(NETest PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
