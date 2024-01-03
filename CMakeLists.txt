@@ -7,6 +7,7 @@ set(SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cassette.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cpu.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_addr.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_ins.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/disk.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/misc.cpp"

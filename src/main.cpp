@@ -23,7 +23,7 @@ int main() {
     cpu.Reset();
     // cpu.IRQ();
     // std::cout << "PC: " << std::hex << +cpu.PC << std::endl;
-    cpu.Exec(0xC000, 500);
+    cpu.Exec(0xC000, 5250);
 
     // std::cout << "PRG ROM SIZE: " << disk.prg.size() << std::endl;
 

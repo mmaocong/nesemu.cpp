@@ -96,7 +96,7 @@ static const std::vector<Operation> lookup = {
     {&CPU::ORA, &CPU::IZX, Instruct::ORA, AddrMode::IZX, 6, "ORA"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 3, "XXX"},
+    {&CPU::XXX, &CPU::ZPG, Instruct::NOP, AddrMode::ZPG, 3, "XXX"},
     {&CPU::ORA, &CPU::ZPG, Instruct::ORA, AddrMode::ZPG, 3, "ORA"},
     {&CPU::ASL, &CPU::ZPG, Instruct::ASL, AddrMode::ZPG, 5, "ASL"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 5, "XXX"},
@@ -104,7 +104,7 @@ static const std::vector<Operation> lookup = {
     {&CPU::ORA, &CPU::IMM, Instruct::ORA, AddrMode::IMM, 2, "ORA"},
     {&CPU::ALA, &CPU::IMP, Instruct::ASL, AddrMode::IMP, 2, "ASL"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 4, "XXX"},
+    {&CPU::XXX, &CPU::ABS, Instruct::NOP, AddrMode::ABS, 4, "XXX"},
     {&CPU::ORA, &CPU::ABS, Instruct::ORA, AddrMode::ABS, 4, "ORA"},
     {&CPU::ASL, &CPU::ABS, Instruct::ASL, AddrMode::ABS, 6, "ASL"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
@@ -112,7 +112,7 @@ static const std::vector<Operation> lookup = {
     {&CPU::ORA, &CPU::IZY, Instruct::ORA, AddrMode::IZY, 5, "ORA"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 4, "XXX"},
+    {&CPU::XXX, &CPU::ZPX, Instruct::NOP, AddrMode::ZPX, 4, "XXX"},
     {&CPU::ORA, &CPU::ZPX, Instruct::ORA, AddrMode::ZPX, 4, "ORA"},
     {&CPU::ASL, &CPU::ZPX, Instruct::ASL, AddrMode::ZPX, 6, "ASL"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
@@ -120,13 +120,13 @@ static const std::vector<Operation> lookup = {
     {&CPU::ORA, &CPU::ABY, Instruct::ORA, AddrMode::ABY, 4, "ORA"},
     {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "XXX"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 4, "XXX"}, // TBD
+    {&CPU::XXX, &CPU::ABX, Instruct::NOP, AddrMode::ABX, 4, "XXX"},
     {&CPU::ORA, &CPU::ABX, Instruct::ORA, AddrMode::ABX, 4, "ORA"},
     {&CPU::ASL, &CPU::AXP, Instruct::ASL, AddrMode::ABX, 7, "ASL"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
     {&CPU::JSR, &CPU::ABS, Instruct::JSR, AddrMode::ABS, 6, "JSR"},
     {&CPU::AND, &CPU::IZX, Instruct::AND, AddrMode::IZX, 6, "AND"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
+    {&CPU::XXX, &CPU::ZPX, Instruct::XXX, AddrMode::ZPX, 2, "XXX"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
     {&CPU::BIT, &CPU::ZPG, Instruct::BIT, AddrMode::ZPG, 3, "BIT"},
     {&CPU::AND, &CPU::ZPG, Instruct::AND, AddrMode::ZPG, 3, "AND"},
@@ -144,7 +144,7 @@ static const std::vector<Operation> lookup = {
     {&CPU::AND, &CPU::IZY, Instruct::AND, AddrMode::IZY, 5, "AND"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 4, "XXX"},
+    {&CPU::XXX, &CPU::ZPX, Instruct::NOP, AddrMode::ZPX, 4, "XXX"},
     {&CPU::AND, &CPU::ZPX, Instruct::AND, AddrMode::ZPX, 4, "AND"},
     {&CPU::ROL, &CPU::ZPX, Instruct::ROL, AddrMode::ZPX, 6, "ROL"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
@@ -152,7 +152,7 @@ static const std::vector<Operation> lookup = {
     {&CPU::AND, &CPU::ABY, Instruct::AND, AddrMode::ABY, 4, "AND"},
     {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "XXX"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 4, "XXX"}, // TBD
+    {&CPU::XXX, &CPU::ABX, Instruct::NOP, AddrMode::ABX, 4, "XXX"},
     {&CPU::AND, &CPU::ABX, Instruct::AND, AddrMode::ABX, 4, "AND"},
     {&CPU::ROL, &CPU::AXP, Instruct::ROL, AddrMode::ABX, 7, "ROL"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
@@ -160,7 +160,7 @@ static const std::vector<Operation> lookup = {
     {&CPU::EOR, &CPU::IZX, Instruct::EOR, AddrMode::IZX, 6, "EOR"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 3, "XXX"},
+    {&CPU::XXX, &CPU::ZPG, Instruct::NOP, AddrMode::ZPG, 3, "XXX"},
     {&CPU::EOR, &CPU::ZPG, Instruct::EOR, AddrMode::ZPG, 3, "EOR"},
     {&CPU::LSR, &CPU::ZPG, Instruct::LSR, AddrMode::ZPG, 5, "LSR"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 5, "XXX"},
@@ -176,7 +176,7 @@ static const std::vector<Operation> lookup = {
     {&CPU::EOR, &CPU::IZY, Instruct::EOR, AddrMode::IZY, 5, "EOR"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 4, "XXX"},
+    {&CPU::XXX, &CPU::ZPX, Instruct::NOP, AddrMode::ZPX, 4, "XXX"},
     {&CPU::EOR, &CPU::ZPX, Instruct::EOR, AddrMode::ZPX, 4, "EOR"},
     {&CPU::LSR, &CPU::ZPX, Instruct::LSR, AddrMode::ZPX, 6, "LSR"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
@@ -184,7 +184,7 @@ static const std::vector<Operation> lookup = {
     {&CPU::EOR, &CPU::ABY, Instruct::EOR, AddrMode::ABY, 4, "EOR"},
     {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "XXX"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 4, "XXX"}, // TBD
+    {&CPU::XXX, &CPU::ABX, Instruct::NOP, AddrMode::ABX, 4, "XXX"},
     {&CPU::EOR, &CPU::ABX, Instruct::EOR, AddrMode::ABX, 4, "EOR"},
     {&CPU::LSR, &CPU::AXP, Instruct::LSR, AddrMode::ABX, 7, "LSR"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
@@ -192,7 +192,7 @@ static const std::vector<Operation> lookup = {
     {&CPU::ADC, &CPU::IZX, Instruct::ADC, AddrMode::IZX, 6, "ADC"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 3, "XXX"},
+    {&CPU::XXX, &CPU::ZPG, Instruct::NOP, AddrMode::ZPG, 3, "XXX"},
     {&CPU::ADC, &CPU::ZPG, Instruct::ADC, AddrMode::ZPG, 3, "ADC"},
     {&CPU::ROR, &CPU::ZPG, Instruct::ROR, AddrMode::ZPG, 5, "ROR"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 5, "XXX"},
@@ -208,7 +208,7 @@ static const std::vector<Operation> lookup = {
     {&CPU::ADC, &CPU::IZY, Instruct::ADC, AddrMode::IZY, 5, "ADC"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 4, "XXX"},
+    {&CPU::XXX, &CPU::ZPX, Instruct::NOP, AddrMode::ZPX, 4, "XXX"},
     {&CPU::ADC, &CPU::ZPX, Instruct::ADC, AddrMode::ZPX, 4, "ADC"},
     {&CPU::ROR, &CPU::ZPX, Instruct::ROR, AddrMode::ZPX, 6, "ROR"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
@@ -216,11 +216,11 @@ static const std::vector<Operation> lookup = {
     {&CPU::ADC, &CPU::ABY, Instruct::ADC, AddrMode::ABY, 4, "ADC"},
     {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "XXX"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 4, "XXX"}, // TBD
+    {&CPU::XXX, &CPU::ABX, Instruct::NOP, AddrMode::ABX, 4, "XXX"},
     {&CPU::ADC, &CPU::ABX, Instruct::ADC, AddrMode::ABX, 4, "ADC"},
     {&CPU::ROR, &CPU::AXP, Instruct::ROR, AddrMode::ABX, 7, "ROR"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "XXX"},
+    {&CPU::XXX, &CPU::IMM, Instruct::NOP, AddrMode::IMM, 2, "XXX"},
     {&CPU::STA, &CPU::IZX, Instruct::STA, AddrMode::IZX, 6, "STA"},
     {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "XXX"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
@@ -304,7 +304,7 @@ static const std::vector<Operation> lookup = {
     {&CPU::CMP, &CPU::IZY, Instruct::CMP, AddrMode::IZY, 5, "CMP"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 4, "XXX"},
+    {&CPU::XXX, &CPU::ZPX, Instruct::NOP, AddrMode::ZPX, 4, "XXX"},
     {&CPU::CMP, &CPU::ZPX, Instruct::CMP, AddrMode::ZPX, 4, "CMP"},
     {&CPU::DEC, &CPU::ZPX, Instruct::DEC, AddrMode::ZPX, 6, "DEC"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
@@ -312,7 +312,7 @@ static const std::vector<Operation> lookup = {
     {&CPU::CMP, &CPU::ABY, Instruct::CMP, AddrMode::ABY, 4, "CMP"},
     {&CPU::NOP, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "NOP"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 4, "XXX"}, // TBD
+    {&CPU::XXX, &CPU::ABX, Instruct::NOP, AddrMode::ABX, 4, "XXX"},
     {&CPU::CMP, &CPU::ABX, Instruct::CMP, AddrMode::ABX, 4, "CMP"},
     {&CPU::DEC, &CPU::AXP, Instruct::DEC, AddrMode::ABX, 7, "DEC"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
@@ -336,7 +336,7 @@ static const std::vector<Operation> lookup = {
     {&CPU::SBC, &CPU::IZY, Instruct::SBC, AddrMode::IZY, 5, "SBC"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 4, "XXX"},
+    {&CPU::XXX, &CPU::ZPX, Instruct::NOP, AddrMode::ZPX, 4, "XXX"},
     {&CPU::SBC, &CPU::ZPX, Instruct::SBC, AddrMode::ZPX, 4, "SBC"},
     {&CPU::INC, &CPU::ZPX, Instruct::INC, AddrMode::ZPX, 6, "INC"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
@@ -344,7 +344,7 @@ static const std::vector<Operation> lookup = {
     {&CPU::SBC, &CPU::ABY, Instruct::SBC, AddrMode::ABY, 4, "SBC"},
     {&CPU::NOP, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "NOP"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 4, "XXX"}, // TBD
+    {&CPU::XXX, &CPU::ABX, Instruct::NOP, AddrMode::ABX, 4, "XXX"},
     {&CPU::SBC, &CPU::ABX, Instruct::SBC, AddrMode::ABX, 4, "SBC"},
     {&CPU::INC, &CPU::AXP, Instruct::INC, AddrMode::ABX, 7, "INC"},
     {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
@@ -486,10 +486,11 @@ void CPU::Exec(const uint16_t &addr, const size_t &n) {
 
         cyc_count += cycles;
         std::cout << op.name << " <" << +(uint8_t)op.addrmode << "> "
-                  << "; P: " << Misc::hex(RF.reg, 2)
                   << "; A: " << Misc::hex(RA, 2) << "; X: " << Misc::hex(RX, 2)
-                  << "; Y: " << Misc::hex(RY, 2) << "; SP: " << Misc::hex(SP, 2)
-                  << std::dec << "; CYC: " << +cyc_count << std::endl;
+                  << "; Y: " << Misc::hex(RY, 2)
+                  << "; P: " << Misc::hex(RF.reg, 2)
+                  << "; SP: " << Misc::hex(SP, 2) << std::dec
+                  << "; CYC: " << +cyc_count << std::endl;
         PC++;
 
         // update cycles
