@@ -1,5 +1,10 @@
 // ============================================================================
 // CPU of the NES i.e. the 6502 processor
+//
+// Reference:
+//
+// - https://www.nesdev.org/wiki/CPU
+// - http://www.6502.org/tutorials/6502opcodes.html
 // ============================================================================
 
 #pragma once
@@ -7,41 +12,34 @@
 #include "const.hpp"
 #include "disk.hpp"
 
-using RegB = uint8_t;  // byte-sized register
-using RegW = uint16_t; // word-sized register
-
-// implement flag register as a union of 1 byte and 1 struct
-union RegF {
-
-    uint8_t reg;
-
-    // implement each flag as a bit
-    struct Flags {
-        uint8_t C : 1; // Carry
-        uint8_t Z : 1; // Zero
-        uint8_t I : 1; // Interrupt disable
-        uint8_t D : 1; // Decimal mode
-        uint8_t B : 1; // Break
-        uint8_t U : 1; // Unused
-        uint8_t V : 1; // Overflow
-        uint8_t N : 1; // Negative
-    } flags;
-
-    // set the negative flag
-    inline void SetN(const Byte &f) { flags.N = (f & (1 << 7)) != 0; }
-
-    // set the zero flag
-    inline void SetZ(const Byte &f) { flags.Z = f == 0x00; }
-};
-
 struct CPU {
+
+    // implement flag register as a union of 1 byte and 1 struct
+    union RegF {
+
+        uint8_t reg;
+
+        // implement each flag as a bit
+        struct {
+            uint8_t C : 1; // Carry
+            uint8_t Z : 1; // Zero
+            uint8_t I : 1; // Interrupt disable
+            uint8_t D : 1; // Decimal mode
+            uint8_t B : 1; // Break
+            uint8_t U : 1; // Unused
+            uint8_t V : 1; // Overflow
+            uint8_t N : 1; // Negative
+        };
+
+        // set the negative flag
+        inline void SetN(const Byte &f) { N = (f & (1 << 7)) != 0; }
+
+        // set the zero flag
+        inline void SetZ(const Byte &f) { Z = f == 0x00; }
+    };
 
     // Initial stack pointer value
     static constexpr uint8_t SP_INIT = 0xFD;
-    // PC address for reset / interrupt / NMI
-    static constexpr uint16_t ADDR_RES = 0xFFFC;
-    static constexpr uint16_t ADDR_IRQ = 0xFFFE;
-    static constexpr uint16_t ADDR_NMI = 0xFFFA;
 
     // Registers
     // store results and the program control flow
@@ -161,7 +159,11 @@ struct CPU {
 
     // ---------- execute functions ----------
 
-    void Clock();
+    void RunCycle();
+
+    uint8_t RunInstr();
+
+    void Print();
 
     void Exec(const uint16_t &, const size_t &);
 

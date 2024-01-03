@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.27)
 
 project(NesEmu VERSION 1.0.0)
 
+find_package(GTest CONFIG REQUIRED)
+
 # define sources and headers
 set(SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
@@ -41,3 +43,26 @@ target_include_directories(NesEmu PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_BINARY_DIR}/include" # Ensures config.h can be found
 )
+
+# Tests
+enable_testing()
+add_executable(NETest
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cpu.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/cassette.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/cpu.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_addr.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_ins.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/disk.cpp"
+)
+set_target_properties(NETest PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+target_include_directories(NETest PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_BINARY_DIR}/include" # Ensures config.h can be found
+)
+target_link_libraries(NETest PRIVATE
+    GTest::gtest
+    GTest::gtest_main
+)
+add_test(NAME NETestSuite COMMAND NETest)
