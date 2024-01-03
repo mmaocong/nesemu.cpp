@@ -455,12 +455,13 @@ void CPU::BinToAsm(const Mem &buffer, std::vector<std::string> &asmcode) {
     }
 }
 
-void CPU::Clock() {
+// Run one cycle
+void CPU::RunCycle() {
     if (cycles == 0) {
         // fetch
         Byte ind_op = disk->ReadCPU(PC++);
         // set unused flag
-        RF.flags.U = 1;
+        RF.U = 1;
         Operation op = lookup[ind_op];
         // update cycles
         cycles = op.cycles;
@@ -468,9 +469,24 @@ void CPU::Clock() {
         (this->*op.func_addrmode)();
         (this->*op.func_instruct)();
         // set unused flag
-        RF.flags.U = 1;
+        RF.U = 1;
     }
     cycles--;
+}
+
+// Run a complete instruction and return the number of cycles it takes
+uint8_t CPU::RunInstr() {
+    Byte opcode = disk->ReadCPU(PC++);
+    Operation op = lookup[opcode];
+    // execute
+    RF.U = 1;
+    (this->*op.func_addrmode)();
+    (this->*op.func_instruct)();
+    RF.U = 1;
+    // setting cycles
+    uint8_t res = op.cycles + cycles;
+    cycles = 0;
+    return res;
 }
 
 // Execute all instructions for debugging
@@ -496,9 +512,15 @@ void CPU::Exec(const uint16_t &addr, const size_t &n) {
         // update cycles
         cycles = op.cycles;
         // execute
-        RF.flags.U = 1;
+        RF.U = 1;
         (this->*op.func_addrmode)();
         (this->*op.func_instruct)();
-        RF.flags.U = 1;
+        RF.U = 1;
     }
+}
+
+void CPU::Print() {
+    std::cout << "A:" << Misc::hex(RA, 2) << " X:" << Misc::hex(RX, 2)
+              << " Y:" << Misc::hex(RY, 2) << " P:" << Misc::hex(RF.reg, 2)
+              << " SP:" << Misc::hex(SP, 2) << std::endl;
 }

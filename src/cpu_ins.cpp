@@ -2,6 +2,11 @@
 
 #include "cpu.hpp"
 
+// PC address for reset / interrupt / NMI
+static constexpr uint16_t ADDR_RES = 0xFFFC;
+static constexpr uint16_t ADDR_IRQ = 0xFFFE;
+static constexpr uint16_t ADDR_NMI = 0xFFFA;
+
 // ----------------------------------------------------------------------------
 // helper functions
 // ----------------------------------------------------------------------------
@@ -31,7 +36,7 @@ void CPU::BIT() {
     // set flags
     RF.SetZ(val & RA);
     RF.SetN(val);
-    RF.flags.V = (val & (1 << 6)) > 0;
+    RF.V = (val & (1 << 6)) > 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -78,7 +83,7 @@ void CPU::Reset() {
 // is read form hard coded location 0xFFFE, which is subsequently
 // set to the program counter.
 void CPU::IRQ() {
-    if (RF.flags.I == 1)
+    if (RF.I == 1)
         return;
     // push program counter to stack
     // NOTE: little endian
@@ -86,9 +91,9 @@ void CPU::IRQ() {
     disk->WriteCPU(stack_addr(SP--), PC & 0x00FF);
 
     // set flags
-    RF.flags.B = 0;
-    RF.flags.U = 1;
-    RF.flags.I = 1;
+    RF.B = 0;
+    RF.U = 1;
+    RF.I = 1;
     // push status register to stack
     disk->WriteCPU(stack_addr(SP--), RF.reg);
     // read new program counter location from fixed address
@@ -109,9 +114,9 @@ void CPU::NMI() {
     disk->WriteCPU(stack_addr(SP--), PC & 0x00FF);
 
     // set flags
-    RF.flags.B = 0;
-    RF.flags.U = 1;
-    RF.flags.I = 1;
+    RF.B = 0;
+    RF.U = 1;
+    RF.I = 1;
     // push status register to stack
     disk->WriteCPU(stack_addr(SP--), RF.reg);
     // read new program counter location from fixed address
@@ -130,13 +135,13 @@ void CPU::BRK() {
     disk->WriteCPU(stack_addr(SP--), PC & 0x00FF);
 
     // set flags
-    RF.flags.B = 1;
+    RF.B = 1;
 
     // push status register to stack
     disk->WriteCPU(stack_addr(SP--), RF.reg);
 
     // set interrupt disable flag
-    RF.flags.B = 0;
+    RF.B = 0;
 
     // read new program counter
     uint16_t lo = disk->ReadCPU(ADDR_IRQ);
@@ -151,8 +156,8 @@ void CPU::RTI() {
     RF.reg = disk->ReadCPU(stack_addr(SP));
 
     // unset flags
-    RF.flags.B = 0;
-    RF.flags.U = 0;
+    RF.B = 0;
+    RF.U = 0;
 
     // pull program counter from stack
     // NOTE: little endian
@@ -249,12 +254,12 @@ void CPU::JMP() { PC = TABS; }
 // - status -> stack
 void CPU::PHP() {
     // save flags
-    RF.flags.B = 1;
-    RF.flags.U = 1;
+    RF.B = 1;
+    RF.U = 1;
     disk->WriteCPU(stack_addr(SP--), RF.reg);
     // reset flags
-    RF.flags.B = 0;
-    RF.flags.U = 0;
+    RF.B = 0;
+    RF.U = 0;
 }
 
 // Instruction: Pop Status Register off Stack.
@@ -265,9 +270,9 @@ void CPU::PLP() {
     // pull status register from stack
     RF.reg = disk->ReadCPU(stack_addr(SP));
     // reset flags
-    RF.flags.U = 1;
+    RF.U = 1;
     // NOTE: added to align with the nestest
-    RF.flags.B = 0;
+    RF.B = 0;
 }
 
 // Instruction: Push Accumulator to Stack.
@@ -298,7 +303,7 @@ void CPU::PLA() {
 //
 // - pc = address if N = 1
 void CPU::BMI() {
-    if (RF.flags.N == 1) {
+    if (RF.N == 1) {
         // add extra cycle
         cycles++;
         TABS = TREL + PC;
@@ -314,7 +319,7 @@ void CPU::BMI() {
 //
 // - PC = address if V == 0
 void CPU::BVC() {
-    if (RF.flags.V == 0) {
+    if (RF.V == 0) {
         // add extra cycle
         cycles++;
         // set absolute address
@@ -331,7 +336,7 @@ void CPU::BVC() {
 //
 // PC := address, if V = 1
 void CPU::BVS() {
-    if (RF.flags.V == 1) {
+    if (RF.V == 1) {
         // add extra cycle
         cycles++;
         // set absolute address
@@ -348,7 +353,7 @@ void CPU::BVS() {
 //
 // - PC := address, if C == 0
 void CPU::BCC() {
-    if (RF.flags.C == 0) {
+    if (RF.C == 0) {
         // add extra cycle
         cycles++;
         // set absolute address
@@ -365,7 +370,7 @@ void CPU::BCC() {
 //
 // - PC := address, if C == 1
 void CPU::BCS() {
-    if (RF.flags.C == 1) {
+    if (RF.C == 1) {
         // add extra cycle
         cycles++;
         // set absolute address
@@ -382,7 +387,7 @@ void CPU::BCS() {
 //
 // PC := address, if Z == 0
 void CPU::BNE() {
-    if (RF.flags.Z == 0) {
+    if (RF.Z == 0) {
         // add extra cycle
         cycles++;
         // set absolute address
@@ -399,7 +404,7 @@ void CPU::BNE() {
 //
 // - PC := address, if Z == 1
 void CPU::BEQ() {
-    if (RF.flags.Z == 1) {
+    if (RF.Z == 1) {
         // add extra cycle
         cycles++;
         // set absolute address
@@ -416,7 +421,7 @@ void CPU::BEQ() {
 //
 // - PC := address, if N == 0
 void CPU::BPL() {
-    if (RF.flags.N == 0) {
+    if (RF.N == 0) {
         // add extra cycle
         cycles++;
         // set absolute address
@@ -460,13 +465,12 @@ void CPU::ADC() {
     // fetch data from absolute address
     uint16_t val = disk->ReadCPU(TABS);
     // R = A + M + C
-    uint16_t res = (uint16_t)RA + val + (uint16_t)RF.flags.C;
+    uint16_t res = (uint16_t)RA + val + (uint16_t)RF.C;
     // set flags
-    RF.flags.C = res > 0xFF;
+    RF.C = res > 0xFF;
     RF.SetZ(res);
     RF.SetN(res);
-    RF.flags.V =
-        ((~((uint16_t)RA ^ val) & ((uint16_t)RA ^ res)) & (1 << 7)) != 0;
+    RF.V = ((~((uint16_t)RA ^ val) & ((uint16_t)RA ^ res)) & (1 << 7)) != 0;
     // store result in accumulator
     RA = res & 0x00FF;
 }
@@ -480,12 +484,12 @@ void CPU::SBC() {
     // val := -M - 1
     uint16_t val = disk->ReadCPU(TABS) ^ 0x00FF;
     // R = A + (-M - 1) + C
-    uint16_t res = (uint16_t)RA + val + (uint16_t)RF.flags.C;
+    uint16_t res = (uint16_t)RA + val + (uint16_t)RF.C;
     // set flags
-    RF.flags.C = (res & 0xFF00) != 0;
+    RF.C = (res & 0xFF00) != 0;
     RF.SetZ(res);
     RF.SetN(res);
-    RF.flags.V = ((res ^ (uint16_t)RA) & (res ^ val) & (1 << 7)) != 0;
+    RF.V = ((res ^ (uint16_t)RA) & (res ^ val) & (1 << 7)) != 0;
     // store result in accumulator
     RA = res & 0x00FF;
 }
@@ -499,7 +503,7 @@ void CPU::LSR() {
     // fetch data from absolute address
     uint16_t val = disk->ReadCPU(TABS);
     // set C flag
-    RF.flags.C = (val & 0x0001) != 0;
+    RF.C = (val & 0x0001) != 0;
     // shift right
     val >>= 1;
     // set flags
@@ -515,7 +519,7 @@ void CPU::LRA() {
     // fetch data from absolute address
     uint16_t val = disk->ReadCPU(TABS);
     // set C flag
-    RF.flags.C = (val & 0x0001) != 0;
+    RF.C = (val & 0x0001) != 0;
     // shift right
     val >>= 1;
     // set flags
@@ -533,7 +537,7 @@ void CPU::ASL() {
     // fetch data from absolute address and shift left
     uint16_t val = disk->ReadCPU(TABS) << 1;
     // set flags
-    RF.flags.C = (val & 0xFF00) != 0;
+    RF.C = (val & 0xFF00) != 0;
     RF.SetZ(val);
     RF.SetN(val);
     // write data to absolute address
@@ -546,7 +550,7 @@ void CPU::ALA() {
     // fetch data from absolute address and shift left
     uint16_t val = disk->ReadCPU(TABS) << 1;
     // set flags
-    RF.flags.C = (val & 0xFF00) != 0;
+    RF.C = (val & 0xFF00) != 0;
     RF.SetZ(val);
     RF.SetN(val);
     // store result in accumulator
@@ -561,9 +565,9 @@ void CPU::ALA() {
 void CPU::ROL() {
     // fetch data from absolute address, rotate left, and set C flag
     // NOTE: C flag is set to the old bit 7
-    uint16_t val = disk->ReadCPU(TABS) << 1 | (uint16_t)RF.flags.C;
+    uint16_t val = disk->ReadCPU(TABS) << 1 | (uint16_t)RF.C;
     // set flags
-    RF.flags.C = (val & 0xFF00) != 0;
+    RF.C = (val & 0xFF00) != 0;
     RF.SetZ(val);
     RF.SetN(val);
     // write data to absolute address
@@ -574,9 +578,9 @@ void CPU::ROL() {
 // Same as ROL except that the result is stored in the accumulator
 void CPU::RLA() {
     // f
-    uint16_t val = disk->ReadCPU(TABS) << 1 | (uint16_t)RF.flags.C;
+    uint16_t val = disk->ReadCPU(TABS) << 1 | (uint16_t)RF.C;
     // set flags
-    RF.flags.C = (val & 0xFF00) != 0;
+    RF.C = (val & 0xFF00) != 0;
     RF.SetZ(val);
     RF.SetN(val);
     // store result in accumulator
@@ -591,9 +595,9 @@ void CPU::ROR() {
     // fetch data from absolute address
     Byte val = disk->ReadCPU(TABS);
     // rotate right
-    uint16_t res = (val >> 1) | (RF.flags.C << 7);
+    uint16_t res = (val >> 1) | (RF.C << 7);
     // set flags
-    RF.flags.C = (val & 0x01) != 0;
+    RF.C = (val & 0x01) != 0;
     RF.SetZ(res);
     RF.SetN(res);
     // write data to absolute address
@@ -606,9 +610,9 @@ void CPU::RRA() {
     // fetch data from absolute address
     Byte val = disk->ReadCPU(TABS);
     // rotate right
-    uint16_t res = (val >> 1) | (RF.flags.C << 7);
+    uint16_t res = (val >> 1) | (RF.C << 7);
     // set flags
-    RF.flags.C = (val & 0x01) != 0;
+    RF.C = (val & 0x01) != 0;
     RF.SetZ(res);
     RF.SetN(res);
     // store result in accumulator
@@ -733,7 +737,7 @@ void CPU::CPY() {
     Byte val = disk->ReadCPU(TABS);
     uint16_t tmp = (uint16_t)RY - (uint16_t)val;
     // set flags
-    RF.flags.C = RY >= val;
+    RF.C = RY >= val;
     RF.SetZ(tmp);
     RF.SetN(tmp);
 }
@@ -748,7 +752,7 @@ void CPU::CMP() {
     Byte val = disk->ReadCPU(TABS);
     uint16_t tmp = (uint16_t)RA - (uint16_t)val;
     // set flags
-    RF.flags.C = RA >= val;
+    RF.C = RA >= val;
     RF.SetZ(tmp);
     RF.SetN(tmp);
 }
@@ -763,7 +767,7 @@ void CPU::CPX() {
     Byte val = disk->ReadCPU(TABS);
     uint16_t tmp = (uint16_t)RX - (uint16_t)val;
     // set flags
-    RF.flags.C = RX >= val;
+    RF.C = RX >= val;
     RF.SetZ(tmp);
     RF.SetN(tmp);
 }
@@ -851,34 +855,34 @@ void CPU::INX() {
 // Instruction: Clear Carry Flag
 //
 // - C = 0
-void CPU::CLC() { RF.flags.C = 0; }
+void CPU::CLC() { RF.C = 0; }
 
 // Instruction: Clear Decimal Flag.
 //
 // D := 0
-void CPU::CLD() { RF.flags.D = 0; }
+void CPU::CLD() { RF.D = 0; }
 
 // Instruction: Clear Overflow Flag.
 //
 // - V := 0
-void CPU::CLV() { RF.flags.V = 0; }
+void CPU::CLV() { RF.V = 0; }
 
 // Instruction: Disable Interrupts / Clear Interrupt Flag.
 //
 // - I = 0
-void CPU::CLI() { RF.flags.I = 0; }
+void CPU::CLI() { RF.I = 0; }
 
 // Instruction: Set Carry Flag.
 //
 // - C = 1
-void CPU::SEC() { RF.flags.C = 1; }
+void CPU::SEC() { RF.C = 1; }
 
 // Instruction: Set Interrupt Flag / Enable Interrupts.
 //
 // - I := 1
-void CPU::SEI() { RF.flags.I = 1; }
+void CPU::SEI() { RF.I = 1; }
 
 // Instruction: Set Decimal Flag.
 //
 // - D := 1
-void CPU::SED() { RF.flags.D = 1; }
+void CPU::SED() { RF.D = 1; }
