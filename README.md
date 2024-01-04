@@ -1,3 +1,8 @@
 # NesEmu.cpp
 
 Simple Implementation of the classic NES in C++.
+
+## References
+
+- [NesDev Wiki](https://www.nesdev.org/wiki/Nesdev_Wiki)
+- [Writing NES Emulator in Rust](https://bugzmanov.github.io/nes_ebook/)
