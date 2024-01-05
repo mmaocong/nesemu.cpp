@@ -14,7 +14,15 @@ static constexpr char NES_NAME[4] = {0x4E, 0x45, 0x53, 0x1A};
 
 // Constructor
 Disk::Disk()
-    : ram(kRAMSize, 0), vrm(kVRAMSize), pal(kPaletteSize), prg(0), chr(0) {}
+    : ram(kRAMSize, 0), vrm(kVRAMSize), pal(kPaletteSize), prg(0), chr(0) {
+    // clear PPU memory
+    std::fill(ram.begin(), ram.end(), 0);
+
+    // clear cartridge memory
+    prg_kb = 0;
+    chr_kb = 0;
+    mirror = MirrorMode::SINGLE;
+}
 
 // Destructor
 Disk::~Disk() {}

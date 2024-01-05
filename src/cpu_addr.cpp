@@ -15,7 +15,7 @@ void CPU::IMM() { TABS = PC++; }
 //   range.
 // - This only requires one byte instead of the usual two.
 void CPU::ZPG() {
-    TABS = disk->ReadCPU(PC++);
+    TABS = disk->ReadMBus(PC++);
     TABS &= 0x00FF;
 }
 
@@ -25,7 +25,7 @@ void CPU::ZPG() {
 //   address.
 // - Useful for iterating through ranges within the first page.
 void CPU::ZPX() {
-    TABS = disk->ReadCPU(PC++) + RX;
+    TABS = disk->ReadMBus(PC++) + RX;
     TABS &= 0x00FF;
 }
 
@@ -34,7 +34,7 @@ void CPU::ZPX() {
 //   address.
 // - Useful for iterating through ranges within the first page.
 void CPU::ZPY() {
-    TABS = disk->ReadCPU(PC++) + RY;
+    TABS = disk->ReadMBus(PC++) + RY;
     TABS &= 0x00FF;
 }
 
@@ -44,7 +44,7 @@ void CPU::ZPY() {
 // - The address must reside within -128 to +127 of the branch instruction,
 //   i.e. CANNOT directly branch to any address in the addressable range.
 void CPU::REL() {
-    TREL = disk->ReadCPU(PC++);
+    TREL = disk->ReadMBus(PC++);
     // Extend the sign if the value is negative
     if (TREL & (1 << 7))
         TREL |= 0xFF00;
@@ -54,8 +54,8 @@ void CPU::REL() {
 //
 // A full 16-bit address is loaded and used.
 void CPU::ABS() {
-    uint16_t lo = disk->ReadCPU(PC++);
-    uint16_t hi = disk->ReadCPU(PC++);
+    uint16_t lo = disk->ReadMBus(PC++);
+    uint16_t hi = disk->ReadMBus(PC++);
     TABS = (hi << 8) | lo;
 }
 
@@ -66,8 +66,8 @@ void CPU::ABS() {
 //   required
 // - Corresponding Instruction: ORA, AND, EOR, ADC, LDY, LDA, CMP, SBC
 void CPU::ABX() {
-    uint16_t lo = disk->ReadCPU(PC++);
-    uint16_t hi = disk->ReadCPU(PC++);
+    uint16_t lo = disk->ReadMBus(PC++);
+    uint16_t hi = disk->ReadMBus(PC++);
     TABS = (hi << 8) | lo;
     TABS += RX;
 
@@ -81,8 +81,8 @@ void CPU::ABX() {
 //
 // Corresponding Instruction: ASL, ROL, LSR, ROR, STA, DEC, INC
 void CPU::AXP() {
-    uint16_t lo = disk->ReadCPU(PC++);
-    uint16_t hi = disk->ReadCPU(PC++);
+    uint16_t lo = disk->ReadMBus(PC++);
+    uint16_t hi = disk->ReadMBus(PC++);
     TABS = (hi << 8) | lo;
     TABS += RX;
 }
@@ -94,8 +94,8 @@ void CPU::AXP() {
 //   required
 // - Corresponding Instruction: ORA, AND, EOR, ADC, LDA, LDX, CMP, SBC
 void CPU::ABY() {
-    uint16_t lo = disk->ReadCPU(PC++);
-    uint16_t hi = disk->ReadCPU(PC++);
+    uint16_t lo = disk->ReadMBus(PC++);
+    uint16_t hi = disk->ReadMBus(PC++);
     TABS = (hi << 8) | lo;
     TABS += RY;
 
@@ -107,8 +107,8 @@ void CPU::ABY() {
 //
 // Same as ABY, but only used by STA, and does not require the additional clock
 void CPU::AYP() {
-    uint16_t lo = disk->ReadCPU(PC++);
-    uint16_t hi = disk->ReadCPU(PC++);
+    uint16_t lo = disk->ReadMBus(PC++);
+    uint16_t hi = disk->ReadMBus(PC++);
     TABS = (hi << 8) | lo;
     TABS += RY;
 }
@@ -122,16 +122,16 @@ void CPU::AYP() {
 //   This does NOT actually work on the chip as designed, instead it wraps
 //   back around in the same page, yielding an invalid actual address
 void CPU::IND() {
-    uint16_t lo = disk->ReadCPU(PC++);
-    uint16_t hi = disk->ReadCPU(PC++);
+    uint16_t lo = disk->ReadMBus(PC++);
+    uint16_t hi = disk->ReadMBus(PC++);
     uint16_t ptr = (hi << 8) | lo;
 
     if (lo == 0x00FF)
         // simulate page boundary hardware bug
-        TABS = (disk->ReadCPU(ptr & 0xFF00) << 8) | disk->ReadCPU(ptr);
+        TABS = (disk->ReadMBus(ptr & 0xFF00) << 8) | disk->ReadMBus(ptr);
     else
         // normal operation
-        TABS = (disk->ReadCPU(ptr + 1) << 8) | disk->ReadCPU(ptr);
+        TABS = (disk->ReadMBus(ptr + 1) << 8) | disk->ReadMBus(ptr);
 }
 
 // Addressing mode: Indexed Indirect with X Register Offset.
@@ -140,9 +140,9 @@ void CPU::IND() {
 //   page 0x00.
 // - The actual 16-bit address is read from this location
 void CPU::IZX() {
-    uint16_t ptr = disk->ReadCPU(PC++);
-    uint8_t lo = disk->ReadCPU((ptr + (uint16_t)RX) & 0x00FF);
-    uint8_t hi = disk->ReadCPU((ptr + (uint16_t)RX + 1) & 0x00FF);
+    uint16_t ptr = disk->ReadMBus(PC++);
+    uint8_t lo = disk->ReadMBus((ptr + (uint16_t)RX) & 0x00FF);
+    uint8_t hi = disk->ReadMBus((ptr + (uint16_t)RX + 1) & 0x00FF);
     TABS = (hi << 8) | lo;
 }
 
@@ -155,9 +155,9 @@ void CPU::IZX() {
 //   required.
 // - Corresponding Instruction: ORA, AND, EOR, ADC, LDA, CMP, SBC
 void CPU::IZY() {
-    uint16_t ptr = disk->ReadCPU(PC++);
-    uint8_t lo = disk->ReadCPU(ptr & 0x00FF);
-    uint8_t hi = disk->ReadCPU((ptr + 1) & 0x00FF);
+    uint16_t ptr = disk->ReadMBus(PC++);
+    uint8_t lo = disk->ReadMBus(ptr & 0x00FF);
+    uint8_t hi = disk->ReadMBus((ptr + 1) & 0x00FF);
     TABS = ((hi << 8) | lo) + (uint16_t)RY;
 
     if ((TABS & 0xFF00) != (hi << 8))
@@ -168,8 +168,8 @@ void CPU::IZY() {
 //
 // Same as IZY, but only used by STA, and does not require the additional clock
 void CPU::IYP() {
-    uint16_t ptr = disk->ReadCPU(PC++);
-    uint8_t lo = disk->ReadCPU(ptr & 0x00FF);
-    uint8_t hi = disk->ReadCPU((ptr + 1) & 0x00FF);
+    uint16_t ptr = disk->ReadMBus(PC++);
+    uint8_t lo = disk->ReadMBus(ptr & 0x00FF);
+    uint8_t hi = disk->ReadMBus((ptr + 1) & 0x00FF);
     TABS = ((hi << 8) | lo) + (uint16_t)RY;
 }

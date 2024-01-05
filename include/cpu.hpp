@@ -60,7 +60,7 @@ struct CPU {
     RegB TDAT; // fetched data
 
     // storage
-    Disk *disk; // disk
+    Disk *disk;
 
     // Constructor & Destructor
     CPU();

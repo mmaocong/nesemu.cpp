@@ -32,7 +32,7 @@ void CPU::NOP() {}
 // Instruction: Test Bits
 void CPU::BIT() {
     // fetch data from absolute address
-    Byte val = disk->ReadCPU(TABS);
+    Byte val = disk->ReadMBus(TABS);
     // set flags
     RF.SetZ(val & RA);
     RF.SetN(val);
@@ -55,8 +55,8 @@ void CPU::BIT() {
 void CPU::Reset() {
 
     // reset PC
-    uint16_t lo = disk->ReadCPU(ADDR_RES);
-    uint16_t hi = disk->ReadCPU(ADDR_RES + 1);
+    uint16_t lo = disk->ReadMBus(ADDR_RES);
+    uint16_t hi = disk->ReadMBus(ADDR_RES + 1);
     PC = (hi << 8) | lo;
 
     // reset registers and flags
@@ -87,18 +87,18 @@ void CPU::IRQ() {
         return;
     // push program counter to stack
     // NOTE: little endian
-    disk->WriteCPU(stack_addr(SP--), (PC >> 8) & 0x00FF);
-    disk->WriteCPU(stack_addr(SP--), PC & 0x00FF);
+    disk->WriteMBus(stack_addr(SP--), (PC >> 8) & 0x00FF);
+    disk->WriteMBus(stack_addr(SP--), PC & 0x00FF);
 
     // set flags
     RF.B = 0;
     RF.U = 1;
     RF.I = 1;
     // push status register to stack
-    disk->WriteCPU(stack_addr(SP--), RF.reg);
+    disk->WriteMBus(stack_addr(SP--), RF.reg);
     // read new program counter location from fixed address
-    uint16_t lo = disk->ReadCPU(ADDR_IRQ);
-    uint16_t hi = disk->ReadCPU(ADDR_IRQ + 1);
+    uint16_t lo = disk->ReadMBus(ADDR_IRQ);
+    uint16_t hi = disk->ReadMBus(ADDR_IRQ + 1);
     PC = (hi << 8) | lo;
     cycles = 7;
 }
@@ -110,18 +110,18 @@ void CPU::IRQ() {
 void CPU::NMI() {
     // push program counter to stack
     // NOTE: little endian
-    disk->WriteCPU(stack_addr(SP--), (PC >> 8) & 0x00FF);
-    disk->WriteCPU(stack_addr(SP--), PC & 0x00FF);
+    disk->WriteMBus(stack_addr(SP--), (PC >> 8) & 0x00FF);
+    disk->WriteMBus(stack_addr(SP--), PC & 0x00FF);
 
     // set flags
     RF.B = 0;
     RF.U = 1;
     RF.I = 1;
     // push status register to stack
-    disk->WriteCPU(stack_addr(SP--), RF.reg);
+    disk->WriteMBus(stack_addr(SP--), RF.reg);
     // read new program counter location from fixed address
-    uint16_t lo = disk->ReadCPU(ADDR_NMI);
-    uint16_t hi = disk->ReadCPU(ADDR_NMI + 1);
+    uint16_t lo = disk->ReadMBus(ADDR_NMI);
+    uint16_t hi = disk->ReadMBus(ADDR_NMI + 1);
     PC = (hi << 8) | lo;
     cycles = 8;
 }
@@ -131,21 +131,21 @@ void CPU::BRK() {
     PC++;
     // push program counter to stack
     // NOTE: little endian
-    disk->WriteCPU(stack_addr(SP--), (PC >> 8) & 0x00FF);
-    disk->WriteCPU(stack_addr(SP--), PC & 0x00FF);
+    disk->WriteMBus(stack_addr(SP--), (PC >> 8) & 0x00FF);
+    disk->WriteMBus(stack_addr(SP--), PC & 0x00FF);
 
     // set flags
     RF.B = 1;
 
     // push status register to stack
-    disk->WriteCPU(stack_addr(SP--), RF.reg);
+    disk->WriteMBus(stack_addr(SP--), RF.reg);
 
     // set interrupt disable flag
     RF.B = 0;
 
     // read new program counter
-    uint16_t lo = disk->ReadCPU(ADDR_IRQ);
-    uint16_t hi = disk->ReadCPU(ADDR_IRQ + 1);
+    uint16_t lo = disk->ReadMBus(ADDR_IRQ);
+    uint16_t hi = disk->ReadMBus(ADDR_IRQ + 1);
     PC = (hi << 8) | lo;
 }
 
@@ -153,7 +153,7 @@ void CPU::BRK() {
 void CPU::RTI() {
     // pull status register from stack
     SP++;
-    RF.reg = disk->ReadCPU(stack_addr(SP));
+    RF.reg = disk->ReadMBus(stack_addr(SP));
 
     // unset flags
     RF.B = 0;
@@ -162,9 +162,9 @@ void CPU::RTI() {
     // pull program counter from stack
     // NOTE: little endian
     SP++;
-    PC = disk->ReadCPU(stack_addr(SP));
+    PC = disk->ReadMBus(stack_addr(SP));
     SP++;
-    PC |= disk->ReadCPU(stack_addr(SP)) << 8;
+    PC |= disk->ReadMBus(stack_addr(SP)) << 8;
 }
 
 // ----------------------------------------------------------------------------
@@ -177,7 +177,7 @@ void CPU::RTI() {
 // - Flags: N, Z
 void CPU::AND() {
     // fetch data from absolute address
-    Byte val = disk->ReadCPU(TABS);
+    Byte val = disk->ReadMBus(TABS);
     RA &= val;
     // set flags
     RF.SetZ(RA);
@@ -190,7 +190,7 @@ void CPU::AND() {
 // - Flags: N, Z
 void CPU::ORA() {
     // fetch data from absolute address
-    Byte val = disk->ReadCPU(TABS);
+    Byte val = disk->ReadMBus(TABS);
     RA |= val;
 
     // set flags
@@ -203,7 +203,7 @@ void CPU::ORA() {
 // - A = A xor M
 // - Flags: N, Z
 void CPU::EOR() {
-    Byte val = disk->ReadCPU(TABS);
+    Byte val = disk->ReadMBus(TABS);
     RA ^= val;
     RF.SetZ(RA);
     RF.SetN(RA);
@@ -222,8 +222,8 @@ void CPU::JSR() {
 
     // push program counter to stack
     // NOTE: little endian
-    disk->WriteCPU(stack_addr(SP--), (PC >> 8) & 0x00FF);
-    disk->WriteCPU(stack_addr(SP--), PC & 0x00FF);
+    disk->WriteMBus(stack_addr(SP--), (PC >> 8) & 0x00FF);
+    disk->WriteMBus(stack_addr(SP--), PC & 0x00FF);
     // set program counter
     PC = TABS;
 }
@@ -233,9 +233,9 @@ void CPU::RTS() {
     // pull program counter from stack
     // NOTE: little endian
     SP++;
-    PC = disk->ReadCPU(stack_addr(SP));
+    PC = disk->ReadMBus(stack_addr(SP));
     SP++;
-    PC |= disk->ReadCPU(stack_addr(SP)) << 8;
+    PC |= disk->ReadMBus(stack_addr(SP)) << 8;
     // increment program counter so that it points to the next instruction
     PC++;
 }
@@ -256,7 +256,7 @@ void CPU::PHP() {
     // save flags
     RF.B = 1;
     RF.U = 1;
-    disk->WriteCPU(stack_addr(SP--), RF.reg);
+    disk->WriteMBus(stack_addr(SP--), RF.reg);
     // reset flags
     RF.B = 0;
     RF.U = 0;
@@ -268,7 +268,7 @@ void CPU::PHP() {
 void CPU::PLP() {
     SP++;
     // pull status register from stack
-    RF.reg = disk->ReadCPU(stack_addr(SP));
+    RF.reg = disk->ReadMBus(stack_addr(SP));
     // reset flags
     RF.U = 1;
     // NOTE: added to align with the nestest
@@ -280,7 +280,7 @@ void CPU::PLP() {
 // - A -> stack
 void CPU::PHA() {
     // push accumulator to stack
-    disk->WriteCPU(stack_addr(SP--), RA);
+    disk->WriteMBus(stack_addr(SP--), RA);
 }
 
 // Instruction: Pop Accumulator off Stack
@@ -289,7 +289,7 @@ void CPU::PHA() {
 void CPU::PLA() {
     // pull accumulator from stack
     SP++;
-    RA = disk->ReadCPU(stack_addr(SP));
+    RA = disk->ReadMBus(stack_addr(SP));
     // set flags
     RF.SetZ(RA);
     RF.SetN(RA);
@@ -463,7 +463,7 @@ void CPU::BPL() {
 //     V = ~(A^M) & (A^R)
 void CPU::ADC() {
     // fetch data from absolute address
-    uint16_t val = disk->ReadCPU(TABS);
+    uint16_t val = disk->ReadMBus(TABS);
     // R = A + M + C
     uint16_t res = (uint16_t)RA + val + (uint16_t)RF.C;
     // set flags
@@ -482,7 +482,7 @@ void CPU::ADC() {
 void CPU::SBC() {
     // fetch data from absolute address, and invert the bottom 8 bits
     // val := -M - 1
-    uint16_t val = disk->ReadCPU(TABS) ^ 0x00FF;
+    uint16_t val = disk->ReadMBus(TABS) ^ 0x00FF;
     // R = A + (-M - 1) + C
     uint16_t res = (uint16_t)RA + val + (uint16_t)RF.C;
     // set flags
@@ -501,7 +501,7 @@ void CPU::SBC() {
 // Instruction: Logical Shift Right.
 void CPU::LSR() {
     // fetch data from absolute address
-    uint16_t val = disk->ReadCPU(TABS);
+    uint16_t val = disk->ReadMBus(TABS);
     // set C flag
     RF.C = (val & 0x0001) != 0;
     // shift right
@@ -510,14 +510,14 @@ void CPU::LSR() {
     RF.SetZ(val);
     RF.SetN(val);
     // write data to absolute address
-    disk->WriteCPU(TABS, val & 0x00FF);
+    disk->WriteMBus(TABS, val & 0x00FF);
 }
 
 // Instruction: Logical Shift Right (IMP mode).
 // Same as LSR except that the result is stored in the accumulator
 void CPU::LRA() {
     // fetch data from absolute address
-    uint16_t val = disk->ReadCPU(TABS);
+    uint16_t val = disk->ReadMBus(TABS);
     // set C flag
     RF.C = (val & 0x0001) != 0;
     // shift right
@@ -535,20 +535,20 @@ void CPU::LRA() {
 // - Flags: N, Z, C
 void CPU::ASL() {
     // fetch data from absolute address and shift left
-    uint16_t val = disk->ReadCPU(TABS) << 1;
+    uint16_t val = disk->ReadMBus(TABS) << 1;
     // set flags
     RF.C = (val & 0xFF00) != 0;
     RF.SetZ(val);
     RF.SetN(val);
     // write data to absolute address
-    disk->WriteCPU(TABS, val & 0x00FF);
+    disk->WriteMBus(TABS, val & 0x00FF);
 }
 
 // Instruction: Arithmetic Shift Left (IMP mode).
 // Same as ASL except that the result is stored in the accumulator
 void CPU::ALA() {
     // fetch data from absolute address and shift left
-    uint16_t val = disk->ReadCPU(TABS) << 1;
+    uint16_t val = disk->ReadMBus(TABS) << 1;
     // set flags
     RF.C = (val & 0xFF00) != 0;
     RF.SetZ(val);
@@ -565,20 +565,20 @@ void CPU::ALA() {
 void CPU::ROL() {
     // fetch data from absolute address, rotate left, and set C flag
     // NOTE: C flag is set to the old bit 7
-    uint16_t val = disk->ReadCPU(TABS) << 1 | (uint16_t)RF.C;
+    uint16_t val = disk->ReadMBus(TABS) << 1 | (uint16_t)RF.C;
     // set flags
     RF.C = (val & 0xFF00) != 0;
     RF.SetZ(val);
     RF.SetN(val);
     // write data to absolute address
-    disk->WriteCPU(TABS, val & 0x00FF);
+    disk->WriteMBus(TABS, val & 0x00FF);
 }
 
 // Instruction: Rotate Left (IMP mode).
 // Same as ROL except that the result is stored in the accumulator
 void CPU::RLA() {
     // f
-    uint16_t val = disk->ReadCPU(TABS) << 1 | (uint16_t)RF.C;
+    uint16_t val = disk->ReadMBus(TABS) << 1 | (uint16_t)RF.C;
     // set flags
     RF.C = (val & 0xFF00) != 0;
     RF.SetZ(val);
@@ -593,7 +593,7 @@ void CPU::RLA() {
 // - The original bit 0 is shifted into the Carry.
 void CPU::ROR() {
     // fetch data from absolute address
-    Byte val = disk->ReadCPU(TABS);
+    Byte val = disk->ReadMBus(TABS);
     // rotate right
     uint16_t res = (val >> 1) | (RF.C << 7);
     // set flags
@@ -601,14 +601,14 @@ void CPU::ROR() {
     RF.SetZ(res);
     RF.SetN(res);
     // write data to absolute address
-    disk->WriteCPU(TABS, res & 0x00FF);
+    disk->WriteMBus(TABS, res & 0x00FF);
 }
 
 // Instruction: ROtate Right (IMP mode).
 // Same as ROR except that the result is stored in the accumulator
 void CPU::RRA() {
     // fetch data from absolute address
-    Byte val = disk->ReadCPU(TABS);
+    Byte val = disk->ReadMBus(TABS);
     // rotate right
     uint16_t res = (val >> 1) | (RF.C << 7);
     // set flags
@@ -626,17 +626,17 @@ void CPU::RRA() {
 // Instruction: Store Accumulator at Address.
 //
 // - M := A
-void CPU::STA() { disk->WriteCPU(TABS, RA); }
+void CPU::STA() { disk->WriteMBus(TABS, RA); }
 
 // Instruction: Store Y Register at Address.
 //
 // - M = Y
-void CPU::STY() { disk->WriteCPU(TABS, RY); }
+void CPU::STY() { disk->WriteMBus(TABS, RY); }
 
 // Instruction: Store X Register at Address.
 //
 // - M = X
-void CPU::STX() { disk->WriteCPU(TABS, RX); }
+void CPU::STX() { disk->WriteMBus(TABS, RX); }
 
 // Instruction: Transfer X Register to Accumulator.
 //
@@ -668,7 +668,7 @@ void CPU::TXS() { SP = RX; }
 // - Y := M
 // - Flags: N, Z
 void CPU::LDY() {
-    RY = disk->ReadCPU(TABS);
+    RY = disk->ReadMBus(TABS);
     RF.SetZ(RY);
     RF.SetN(RY);
 }
@@ -678,7 +678,7 @@ void CPU::LDY() {
 // - A := M
 // - Flags: N, Z
 void CPU::LDA() {
-    RA = disk->ReadCPU(TABS);
+    RA = disk->ReadMBus(TABS);
     RF.SetZ(RA);
     RF.SetN(RA);
 }
@@ -688,7 +688,7 @@ void CPU::LDA() {
 // - X := M
 // - Flags: N, Z
 void CPU::LDX() {
-    RX = disk->ReadCPU(TABS);
+    RX = disk->ReadMBus(TABS);
     RF.SetZ(RX);
     RF.SetN(RX);
 }
@@ -734,7 +734,7 @@ void CPU::TSX() {
 // - N := (Y - M) & (1 << 7)
 void CPU::CPY() {
     // fetch data from absolute address
-    Byte val = disk->ReadCPU(TABS);
+    Byte val = disk->ReadMBus(TABS);
     uint16_t tmp = (uint16_t)RY - (uint16_t)val;
     // set flags
     RF.C = RY >= val;
@@ -749,7 +749,7 @@ void CPU::CPY() {
 // - N := (A - M) & (1 << 7)
 void CPU::CMP() {
     // fetch data from absolute address
-    Byte val = disk->ReadCPU(TABS);
+    Byte val = disk->ReadMBus(TABS);
     uint16_t tmp = (uint16_t)RA - (uint16_t)val;
     // set flags
     RF.C = RA >= val;
@@ -764,7 +764,7 @@ void CPU::CMP() {
 // - N := (X - M) & (1 << 7)
 void CPU::CPX() {
     // fetch data from absolute address
-    Byte val = disk->ReadCPU(TABS);
+    Byte val = disk->ReadMBus(TABS);
     uint16_t tmp = (uint16_t)RX - (uint16_t)val;
     // set flags
     RF.C = RX >= val;
@@ -782,14 +782,14 @@ void CPU::CPX() {
 // - Flags: N, Z
 void CPU::DEC() {
     // fetch data from absolute address
-    Byte val = disk->ReadCPU(TABS);
+    Byte val = disk->ReadMBus(TABS);
     // decrement
     val--;
     // set flags
     RF.SetZ(val);
     RF.SetN(val);
     // write data to absolute address
-    disk->WriteCPU(TABS, val);
+    disk->WriteMBus(TABS, val);
 }
 
 // Instruction: Increment Value at Memory Location.
@@ -798,14 +798,14 @@ void CPU::DEC() {
 // - Flags: N, Z
 void CPU::INC() {
     // fetch data from absolute address
-    Byte val = disk->ReadCPU(TABS);
+    Byte val = disk->ReadMBus(TABS);
     // increment
     val++;
     // set flags
     RF.SetZ(val);
     RF.SetN(val);
     // write data to absolute address
-    disk->WriteCPU(TABS, val);
+    disk->WriteMBus(TABS, val);
 }
 
 // Instruction: Decrement Y Register.
