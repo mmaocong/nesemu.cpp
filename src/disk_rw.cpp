@@ -1,5 +1,9 @@
 #include "disk.hpp"
 
+// ----------------------------------------------------------------------------
+// Address Ranges
+// ----------------------------------------------------------------------------
+
 // Address Range for CPU:
 //
 //   =========================== 0xG000: Cartridge Space.
@@ -53,7 +57,7 @@
 // TODO: implement read / write effects
 // https://github.com/quackenbush/nestalgia/blob/master/docs/ppu/SKINNY.TXT
 //
-enum class AddrRangeCPU : uint8_t {
+enum class AddrRangeMBus : uint8_t {
     RG_NONE = 0, // invalid
 
     // RAM space
@@ -67,21 +71,21 @@ enum class AddrRangeCPU : uint8_t {
     RG_G000 = 6, // 0x8000 - 0xffff, PRG-ROM
 };
 
-static constexpr AddrRangeCPU addr_range_cpu(const uint16_t &addr) {
+static inline constexpr AddrRangeMBus addr_range_cpu(const uint16_t &addr) {
     if (addr < 0x2000) {
-        return AddrRangeCPU::RG_2000;
+        return AddrRangeMBus::RG_2000;
     } else if (addr < 0x4000) {
-        return AddrRangeCPU::RG_4000;
+        return AddrRangeMBus::RG_4000;
     } else if (addr < 0x4020) {
-        return AddrRangeCPU::RG_4020;
+        return AddrRangeMBus::RG_4020;
     } else if (addr < 0x6000) {
-        return AddrRangeCPU::RG_6000;
+        return AddrRangeMBus::RG_6000;
     } else if (addr < 0x8000) {
-        return AddrRangeCPU::RG_8000;
+        return AddrRangeMBus::RG_8000;
     } else if (addr <= 0xFFFF) {
-        return AddrRangeCPU::RG_G000;
+        return AddrRangeMBus::RG_G000;
     } else {
-        return AddrRangeCPU::RG_NONE;
+        return AddrRangeMBus::RG_NONE;
     }
 }
 
@@ -144,7 +148,7 @@ static constexpr AddrRangeCPU addr_range_cpu(const uint16_t &addr) {
 //   ---------------------------- 0x1000:
 //    Pattern Table 0.
 //   ============================ 0x0000:
-enum class AddrRangePPU : uint8_t {
+enum class AddrRangePBus : uint8_t {
     RG_NONE = 0, // invalid
 
     // CHR ROM
@@ -168,51 +172,177 @@ enum class AddrRangePPU : uint8_t {
     RG_4000 = 6,
 };
 
-static constexpr AddrRangePPU addr_range_ppu(const uint16_t &addr) {
+static inline constexpr AddrRangePBus addr_range_ppu(const uint16_t &addr) {
     if (addr < 0x1000) {
-        return AddrRangePPU::RG_1000;
+        return AddrRangePBus::RG_1000;
     } else if (addr < 0x2000) {
-        return AddrRangePPU::RG_2000;
+        return AddrRangePBus::RG_2000;
     } else if (addr < 0x3000) {
-        return AddrRangePPU::RG_3000;
+        return AddrRangePBus::RG_3000;
     } else if (addr < 0x3F00) {
-        return AddrRangePPU::RG_3F00;
+        return AddrRangePBus::RG_3F00;
     } else if (addr < 0x3F20) {
-        return AddrRangePPU::RG_3F20;
+        return AddrRangePBus::RG_3F20;
     } else if (addr < 0x4000) {
-        return AddrRangePPU::RG_4000;
+        return AddrRangePBus::RG_4000;
     } else {
-        return AddrRangePPU::RG_NONE;
+        return AddrRangePBus::RG_NONE;
     }
 }
 
 // ----------------------------------------------------------------------------
-// Disk Class
+// Main Bus Access
 // ----------------------------------------------------------------------------
 
+// Read the PPU Registers `PRam`
+//
+// NOTE: The input address `addr` MUST be in the range of 0x0000 - 0x0007.
+Byte Disk::ReadPRam(const uint16_t &addr) {
+    Byte data = 0x00; // dummy default value
+    switch (addr) {
+    case 0x0000: // PPUCTRL: not readable
+        break;
+    case 0x0001: // PPUMASK: not readable
+        break;
+    case 0x0002: // PPUSTATUS
+        data = pram.status.reg;
+        // Reading PPUSTATUS resets different parts of the circuit.
+        // - resets write toggle
+        // - resets vblank flag
+        pram.w = 0;
+        pram.status.vbk = 0;
+        break;
+    case 0x0003: // OAMADDR: not readable
+        break;
+    case 0x0004: // OAMDATA: read directly
+        data = pram.oamdata;
+    case 0x0005: // PPUSCROLL: not readable
+        break;
+    case 0x0006: // PPUADDR: not readable
+        break;
+    case 0x0007: // PPUDATA
+        // - Access the NT VRAM get delayed one cycle
+        // - output buffer containing data from the previous read request
+        // - update the buffer for next time
+        data = pram.buffer;
+        pram.buffer = ReadPBus(pram.v.reg);
+        // - NO DELAY when reading the palette
+        if (addr_range_ppu(pram.v.reg) >= AddrRangePBus::RG_3F20) {
+            data = pram.buffer;
+        }
+        // NOTE: All reads / writes PPUDATA automatically increment the VRAM
+        //       address by 1 or 32 depending on the PPUCTRL register.
+        pram.v.reg += pram.AddrInc();
+        break;
+    default:
+        break;
+    }
+    return data;
+}
+
+// Write the PPU Registers `PRam`
+//
+// NOTE: The input address `addr` MUST be in the range of 0x0000 - 0x0007.
+void Disk::WritePRam(const uint16_t &addr, const Byte &data) {
+    switch (addr) {
+    case 0x0000: // PPUCTRL
+        pram.ctrl.reg = data;
+        pram.t.ntx = pram.ctrl.ntx;
+        pram.t.nty = pram.ctrl.nty;
+        break;
+    case 0x0001: // PPUMASK
+        pram.mask.reg = data;
+        break;
+    case 0x0002: // PPUSTATUS: not writable
+        break;
+    case 0x0003: // OAMADDR
+        pram.oamaddr = data;
+        break;
+    case 0x0004: // OAMDATA
+        pram.oamdata = data;
+        break;
+    case 0x0005: // PPUSCROLL
+        // data contains the scroll offsets in pixel, which can be split into
+        // coarse and fine components.
+        if (pram.w == 0) {
+            // 1st write:
+            pram.x = data & 0x07;
+            pram.t.x_coarse = data >> 3;
+            pram.w = 1;
+        } else {
+            // second write
+            pram.t.y_coarse = data >> 3;
+            pram.t.y = data & 0x07;
+            pram.w = 0;
+        }
+        break;
+    case 0x0006: // PPUADDR
+        // data contains the address of the VRAM to access
+        if (pram.w == 0) {
+            // 1st write:
+            // - The PPU bus can be accessed by CPU via the PPUADDR and PPUDATA
+            //   registers.
+            // - The PPU Bus uses 14-bit addresses (0x0000 - 0x3FFF).
+            // - Writes are stored in the T register.
+            // - The 1st write to this register writes the high 6 bits
+            pram.t.reg = (uint16_t)(data & 0x3F) << 8 | (pram.t.reg & 0x00FF);
+            pram.w = 1;
+        } else {
+            // - The 2nd write to this register writes the low 8 bits
+            // - When a whole address has been written, the PPU will
+            //   update its V register and reset the write toggle.
+            // - NOTE: It is NOT wise to write to the PPU during rendering as
+            //   the PPU will maintam the address automatically whilst
+            //   rendering the scanline position.
+            pram.t.reg = (pram.t.reg & 0xFF00) | data;
+            pram.v.reg = pram.t.reg;
+            pram.w = 0;
+        }
+        break;
+    case 0x0007: // PPUDATA
+        // - The PPU bus can be accessed by CPU via the PPUADDR and PPUDATA
+        //   registers.
+        // - The PPU Bus uses 14-bit addresses (0x0000 - 0x3FFF).
+        // - Writes are stored in the T register.
+        // - The 1st write to this register writes the high 6 bits
+        // - The 2nd write to this register writes the low 8 bits
+        // - When a whole address has been written, the PPU will
+        //   update its V register and reset the write toggle.
+        // - NOTE: It is NOT wise to write to the PPU during rendering as
+        //   the PPU will maintam the address automatically whilst
+        //   rendering the scanline position.
+        WritePBus(pram.v.reg, data);
+        // NOTE: All reads / writes PPUDATA automatically increment the VRAM
+        //       address by 1 or 32 depending on the PPUCTRL register.
+        pram.v.reg += pram.AddrInc();
+        break;
+    default:
+        break;
+    }
+}
+
 // TODO: log read access
-Byte Disk::ReadCPU(const uint16_t &addr) {
-    AddrRangeCPU rg = addr_range_cpu(addr);
+Byte Disk::ReadMBus(const uint16_t &addr) {
+    AddrRangeMBus rg = addr_range_cpu(addr);
     switch (rg) {
-    case AddrRangeCPU::RG_2000:
+    case AddrRangeMBus::RG_2000:
         // NOTE: 2KB RAM
         return ram[addr & 0x07FF];
-    case AddrRangeCPU::RG_4000:
+    case AddrRangeMBus::RG_4000:
         // NOTE: PPU registers are mirrored every 8 bytes i.e.
         // 0x2000 == 0x2008 == 0x2010 == ...
         // 0x2001 == 0x2009 == 0x2011 == ...
         // ...
-        // `addr & 0x2007` equals to `addr % 8 + 0x2000`
-        return ram[addr & 0x2007];
-    case AddrRangeCPU::RG_4020:
+        return ReadPRam(addr & 0x0007);
+    case AddrRangeMBus::RG_4020:
         return ram[addr];
-    case AddrRangeCPU::RG_6000:
+    case AddrRangeMBus::RG_6000:
         // not implemented
         break;
-    case AddrRangeCPU::RG_8000:
+    case AddrRangeMBus::RG_8000:
         // not implemented
         break;
-    case AddrRangeCPU::RG_G000:
+    case AddrRangeMBus::RG_G000:
         if (prg_kb < 32) {
             // 16KB PRG-ROM
             return prg[(addr - 0x8000) & 0x3FFF];
@@ -228,25 +358,28 @@ Byte Disk::ReadCPU(const uint16_t &addr) {
 }
 
 // TODO: log write access
-void Disk::WriteCPU(const uint16_t &addr, const Byte &data) {
-    AddrRangeCPU rg = addr_range_cpu(addr);
+void Disk::WriteMBus(const uint16_t &addr, const Byte &data) {
+    AddrRangeMBus rg = addr_range_cpu(addr);
     switch (rg) {
-    case AddrRangeCPU::RG_2000:
+    case AddrRangeMBus::RG_2000:
         // NOTE: 2KB RAM
         ram[addr & 0x07FF] = data;
         break;
-    case AddrRangeCPU::RG_4000:
+    case AddrRangeMBus::RG_4000:
         // NOTE: PPU registers are mirrored every 8 bytes i.e.
         // 0x2000 == 0x2008 == 0x2010 == ...
         // 0x2001 == 0x2009 == 0x2011 == ...
         // ...
-        // `addr & 0x2007` equals to `addr % 8 + 0x2000`
-        ram[addr & 0x2007] = data;
+        WritePRam(addr & 0x0007, data);
         break;
     default:
         break;
     }
 }
+
+// ----------------------------------------------------------------------------
+// PPU Bus Access
+// ----------------------------------------------------------------------------
 
 // Map the address to the VRAM based on the mirroring mode
 //
@@ -336,45 +469,45 @@ static inline void write_ppu_pal(const uint16_t &addr, const Byte &data,
     mem[mapped_addr] = data;
 }
 
-Byte Disk::ReadPPU(const uint16_t &addr) {
-    AddrRangePPU rg = addr_range_ppu(addr);
+Byte Disk::ReadPBus(const uint16_t &addr) {
+    AddrRangePBus rg = addr_range_ppu(addr);
     switch (rg) {
-    case AddrRangePPU::RG_1000:
+    case AddrRangePBus::RG_1000:
         return chr[addr];
-    case AddrRangePPU::RG_2000:
+    case AddrRangePBus::RG_2000:
         return chr[addr];
-    case AddrRangePPU::RG_3000:
+    case AddrRangePBus::RG_3000:
         return read_ppu_vram(addr & 0x0FFF, vrm, mirror);
-    case AddrRangePPU::RG_3F00:
+    case AddrRangePBus::RG_3F00:
         return read_ppu_vram((addr - 0x1000) & 0x0FFF, vrm, mirror);
-    case AddrRangePPU::RG_3F20:
+    case AddrRangePBus::RG_3F20:
         return read_ppu_pal(addr & 0x001F, pal);
-    case AddrRangePPU::RG_4000:
+    case AddrRangePBus::RG_4000:
         return read_ppu_pal(addr & 0x001F, pal);
     default:
         return 0;
     }
 }
 
-void Disk::WritePPU(const uint16_t &addr, const Byte &data) {
-    AddrRangePPU rg = addr_range_ppu(addr);
+void Disk::WritePBus(const uint16_t &addr, const Byte &data) {
+    AddrRangePBus rg = addr_range_ppu(addr);
     switch (rg) {
-    case AddrRangePPU::RG_1000:
+    case AddrRangePBus::RG_1000:
         chr[addr] = data;
         break;
-    case AddrRangePPU::RG_2000:
+    case AddrRangePBus::RG_2000:
         chr[addr] = data;
         break;
-    case AddrRangePPU::RG_3000:
+    case AddrRangePBus::RG_3000:
         write_ppu_vram(addr & 0x0FFF, data, vrm, mirror);
         break;
-    case AddrRangePPU::RG_3F00:
+    case AddrRangePBus::RG_3F00:
         write_ppu_vram((addr - 0x1000) & 0x0FFF, data, vrm, mirror);
         break;
-    case AddrRangePPU::RG_3F20:
+    case AddrRangePBus::RG_3F20:
         write_ppu_pal(addr & 0x001F, data, pal);
         break;
-    case AddrRangePPU::RG_4000:
+    case AddrRangePBus::RG_4000:
         write_ppu_pal(addr & 0x001F, data, pal);
         break;
     default:

@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.27)
 
 project(NesEmu VERSION 1.0.0)
 
+find_package(SFML 2.6.1 COMPONENTS graphics audio REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 
 # define sources and headers
@@ -14,6 +15,7 @@ set(SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/disk_rw.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/misc.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/neshdr.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ppu.cpp"
 )
 set(HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/const.hpp"
@@ -21,6 +23,7 @@ set(HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/disk.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/misc.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/neshdr.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/ppu.hpp"
 )
 
 # Create the executable
@@ -38,6 +41,11 @@ set_target_properties(NesEmu PROPERTIES
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/include/config.h.in"
     "${CMAKE_BINARY_DIR}/include/config.h"
+)
+
+target_link_libraries(NesEmu PRIVATE
+    sfml-graphics
+    sfml-audio
 )
 
 target_include_directories(NesEmu PRIVATE

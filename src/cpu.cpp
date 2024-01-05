@@ -374,6 +374,7 @@ CPU::CPU() {
 // Destructor
 CPU::~CPU() {}
 
+// TODO: shared_ptr
 void CPU::Mount(const Disk &disk) { this->disk = (Disk *)&disk; }
 
 // show one instruction
@@ -459,7 +460,7 @@ void CPU::BinToAsm(const Mem &buffer, std::vector<std::string> &asmcode) {
 void CPU::RunCycle() {
     if (cycles == 0) {
         // fetch
-        Byte ind_op = disk->ReadCPU(PC++);
+        Byte ind_op = disk->ReadMBus(PC++);
         // set unused flag
         RF.U = 1;
         Operation op = lookup[ind_op];
@@ -476,7 +477,7 @@ void CPU::RunCycle() {
 
 // Run a complete instruction and return the number of cycles it takes
 uint8_t CPU::RunInstr() {
-    Byte opcode = disk->ReadCPU(PC++);
+    Byte opcode = disk->ReadMBus(PC++);
     Operation op = lookup[opcode];
     // execute
     RF.U = 1;
@@ -497,7 +498,7 @@ void CPU::Exec(const uint16_t &addr, const size_t &n) {
 
         std::cout << "$" << std::hex << Misc::hex(PC, 4) << ": ";
 
-        Byte ind_op = disk->ReadCPU(PC);
+        Byte ind_op = disk->ReadMBus(PC);
         Operation op = lookup[ind_op];
 
         cyc_count += cycles;
