@@ -62,6 +62,9 @@ struct CPU {
     // storage
     Disk *disk;
 
+    // Initial program counter value
+    size_t cyc_count;
+
     // Constructor & Destructor
     CPU();
     ~CPU();
@@ -161,7 +164,7 @@ struct CPU {
 
     void RunCycle();
 
-    uint8_t RunInstr();
+    void RunInstr();
 
     void Print();
 

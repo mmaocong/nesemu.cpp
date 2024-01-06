@@ -68,6 +68,7 @@ void CPU::Reset() {
     RF.reg = 0b00100100;
     // TBD: 7 or 8 cycles?
     cycles = 7;
+    cyc_count = 0;
 }
 
 // Interrupt request.
