@@ -1,46 +1,61 @@
-#include <SFML/Graphics.hpp>
+#include <iostream>
 
-// Function to set a pixel to a specific color in an sf::Image
-void SetPixel(sf::Image &image, unsigned int x, unsigned int y,
-              sf::Color color) {
-    if (x < image.getSize().x && y < image.getSize().y) {
-        image.setPixel(x, y, color);
-    }
-}
+#include "const.hpp"
+#include "misc.hpp"
+#include "nes.hpp"
 
 int main() {
-    static constexpr uint16_t kW = 800;
-    static constexpr uint16_t kH = 600;
 
-    // Create a window
-    sf::RenderWindow window(sf::VideoMode(kW, kH), "Set Pixel Example");
+    NES nes;
 
-    // Create an image
-    sf::Image image;
-    image.create(kW, kH, sf::Color::Black);
+    nes.Load("./data/nestest.nes");
+    nes.cpu.PC = 0xC000;
 
-    // Set a pixel to red
-    SetPixel(image, kW / 2, kH / 2, sf::Color::Red);
+    // // smoke test
+    // nes.Run();
 
-    // Load the image into a texture
-    sf::Texture texture;
-    texture.loadFromImage(image);
+    // nes.disk->WritePBus(0x2006, 0x20);
+    // nes.disk->WritePBus(0x2007, 0xAB);
 
-    // Create a sprite that we can draw onto the screen
-    sf::Sprite sprite;
-    sprite.setTexture(texture);
+    // // nametable check
+    // static constexpr uint16_t k1 = 0x2000;
+    // static constexpr uint16_t k2 = 0x23C0;
+    // for (uint16_t i = k1; i < k2; i++) {
+    //     Byte data = nes.disk->ReadPBus(i);
+    //     if (i % 32 == 0) {
+    //         std::cout << std::endl;
+    //     }
+    //     std::cout << Misc::hex(data, 2) << " ";
+    // }
+    // for (uint16_t i = k1; i < k2; i++) {
+    //     Byte data = (rand() % 2) ? 0x3F : 0x30;
+    //     nes.disk->WritePBus(i, data);
+    // }
+    // for (uint64_t i = 0; i < 100; i++) {
+    //     nes.RunCycle();
+    // }
+    // for (uint16_t i = k1; i < k2; i++) {
+    //     Byte data = nes.disk->ReadPBus(i);
+    //     if (i % 32 == 0) {
+    //         std::cout << std::endl;
+    //     }
+    //     std::cout << Misc::hex(data, 2) << " ";
+    // }
 
-    while (window.isOpen()) {
-        sf::Event event;
-        while (window.pollEvent(event)) {
-            if (event.type == sf::Event::Closed)
-                window.close();
-        }
+    // // Bin to asm
+    // std::vector<std::string> asm_code;
+    // nes.cpu.BinToAsm(nes.disk->prg, asm_code);
+    // for (int i = 0; i < asm_code.size(); i++) {
+    //     std::cout << asm_code[i] << std::endl;
+    // }
 
-        window.clear();
-        window.draw(sprite); // Draw the sprite with the modified image
-        window.display();
-    }
+    // // check log
+    // for (size_t i = 0; i < 100; i++) {
+    //     nes.cpu.RunCycle();
+    //     nes.cpu.Print();
+    //     std::cout << "X:" << +nes.ppu.cycle << " Y:" << +nes.ppu.scanline
+    //               << std::endl;
+    // }
 
     return 0;
 }

@@ -356,12 +356,17 @@ static const std::vector<Operation> lookup = {
 
 // Constructor
 CPU::CPU() {
-    // Initialize registers
-    RA = RX = RY = 0x00;
-    SP = SP_INIT;
-    PC = 0x0000;
     // keep only interrupt disable flag set
     RF.reg = 0b00000100;
+
+    // Initialize registers
+    PC = 0x0000;
+    RA = RX = RY = 0x00;
+    SP = SP_INIT;
+
+    // Initialize cycles
+    cycles = 0;
+    cyc_count = 0;
 
     // Initialize temporary registers
     TDAT = 0x00;
@@ -473,10 +478,11 @@ void CPU::RunCycle() {
         RF.U = 1;
     }
     cycles--;
+    cyc_count++;
 }
 
 // Run a complete instruction and return the number of cycles it takes
-uint8_t CPU::RunInstr() {
+void CPU::RunInstr() {
     Byte opcode = disk->ReadMBus(PC++);
     Operation op = lookup[opcode];
     // execute
@@ -485,15 +491,13 @@ uint8_t CPU::RunInstr() {
     (this->*op.func_instruct)();
     RF.U = 1;
     // setting cycles
-    uint8_t res = op.cycles + cycles;
+    cyc_count += (op.cycles + cycles);
     cycles = 0;
-    return res;
 }
 
 // Execute all instructions for debugging
 void CPU::Exec(const uint16_t &addr, const size_t &n) {
     PC = addr;
-    size_t cyc_count = 0;
     for (size_t i = 0; i < n; i++) {
 
         std::cout << "$" << std::hex << Misc::hex(PC, 4) << ": ";
@@ -523,5 +527,6 @@ void CPU::Exec(const uint16_t &addr, const size_t &n) {
 void CPU::Print() {
     std::cout << "A:" << Misc::hex(RA, 2) << " X:" << Misc::hex(RX, 2)
               << " Y:" << Misc::hex(RY, 2) << " P:" << Misc::hex(RF.reg, 2)
-              << " SP:" << Misc::hex(SP, 2) << std::endl;
+              << " SP:" << Misc::hex(SP, 2) << " CYC:" << +cyc_count
+              << std::endl;
 }

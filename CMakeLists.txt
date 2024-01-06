@@ -16,6 +16,7 @@ set(SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/misc.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/neshdr.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ppu.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/nes.cpp"
 )
 set(HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/const.hpp"
@@ -24,6 +25,7 @@ set(HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/misc.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/neshdr.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/ppu.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/nes.hpp"
 )
 
 # Create the executable

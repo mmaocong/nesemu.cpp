@@ -13,16 +13,15 @@ TEST(CPUTest, NesLogCompare) {
     CPU cpu = CPU();
 
     Disk disk = Disk();
-    disk.Attach("./data/nestest.nes");
     cpu.Mount(disk);
+    disk.Attach("./data/nestest.nes");
 
     cpu.Reset();
     cpu.PC = 0xC000;
     int limit = 5250;
 
-    size_t cyc_count = 0;
     for (int i = 1; i < limit; i++) {
-        cyc_count += cpu.RunInstr();
+        cpu.RunInstr();
     }
 
     EXPECT_EQ(cpu.RA, 0x32);
@@ -30,7 +29,7 @@ TEST(CPUTest, NesLogCompare) {
     EXPECT_EQ(cpu.RY, 0x58);
     EXPECT_EQ(cpu.RF.reg, 0x25);
     EXPECT_EQ(cpu.SP, 0xFB);
-    EXPECT_EQ(cyc_count, 15252);
+    EXPECT_EQ(cpu.cyc_count, 15252);
 }
 
 int main(int argc, char **argv) {

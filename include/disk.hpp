@@ -72,9 +72,9 @@ struct PMem {
             uint8_t inc : 1;
             // Sprite pattern table address for 8x8 sprites:
             // 0: $0000; 1: $1000; ignored in 8x16 mode
-            uint8_t stb : 1;
+            uint8_t fgp : 1;
             // Background pattern table address: 0: $0000; 1: $1000
-            uint8_t btb : 1;
+            uint8_t bgp : 1;
             // Sprite size: 0: 8x8 pixels; 1: 8x16 pixels
             uint8_t ssz : 1;
             // PPU master/slave select:
@@ -119,9 +119,9 @@ struct PMem {
             // Show sprites in leftmost 8 pixels of screen
             uint8_t fgl : 1;
             // Show background
-            uint8_t bgs : 1;
+            uint8_t bg : 1;
             // Show sprites
-            uint8_t fgs : 1;
+            uint8_t fg : 1;
             // Emphasize red (green on PAL/Dendy)
             uint8_t red : 1;
             // Emphasize green (red on PAL/Dendy)
