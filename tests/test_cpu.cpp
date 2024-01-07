@@ -17,7 +17,11 @@ TEST(CPUTest, NesLogCompare) {
     disk.Attach("./data/nestest.nes");
 
     cpu.Reset();
+    // align with nestest.log
     cpu.PC = 0xC000;
+    cpu.RF.reg = 0b00100100;
+    cpu.cycles = 7;
+
     int limit = 5250;
 
     for (int i = 1; i < limit; i++) {

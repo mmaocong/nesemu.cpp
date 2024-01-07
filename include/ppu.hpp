@@ -60,6 +60,11 @@ struct PPU {
     // functions
     // ------------------------------------------------------------------------
 
+    void PrintNT();
+    void PrintV();
+    void PrintTile();
+    void PrintXY();
+
     void Reset();
 
     // attach memory to the CPU
@@ -111,6 +116,8 @@ struct PPU {
     };
 
     inline void fetch_bg_nt() {
+        // debug
+        // bg_tile_id = (rand() % 2) ? 0x3F : 0x30;
         bg_tile_id = disk->ReadPBus(0x2000 | (disk->pram.v.reg & 0x0FFF));
     }
 
@@ -126,8 +133,18 @@ struct PPU {
         bg_tile_attr &= 0x03;
     };
 
+    // DCBA98 76543210
+    // ---------------
+    // 0HNNNN NNNNPyyy
+    // |||||| |||||+++- T: Fine Y offset, the row number within a tile
+    // |||||| |||||
+    // |||||| ||||+---- P: Bit plane
+    // |||||| ||||      0: less significant bit; 1: more significant bit
+    // |||||| ||||
+    // ||++++-++++----- N: Tile number from name table
+    // |+-------------- H: Half of pattern table (0: "left"; 1: "right")
+    // +--------------- 0: Pattern table is at $0000-$1FFF
     inline void fetch_bg_tile_lo() {
-
         bg_tile_lo =
             disk->ReadPBus((disk->pram.ctrl.bgp << 12) +
                            ((uint16_t)bg_tile_id << 4) + disk->pram.v.y);

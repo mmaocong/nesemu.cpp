@@ -87,6 +87,39 @@ void PPU::Reset() {
 // Destructor
 PPU::~PPU() {}
 
+void PPU::PrintNT() {
+    const uint16_t k1 = 0x2000;
+    const uint16_t k2 = 0x23C0;
+    for (uint16_t i = k1; i < k2; i++) {
+        Byte data = disk->ReadPBus(i);
+        if (i % 32 == 0) {
+            std::cout << std::endl;
+        }
+        std::cout << Misc::hex(data, 2) << " ";
+    }
+}
+
+void PPU::PrintV() {
+    std::cout << "V: yc:" << Misc::hex(disk->pram.v.y_coarse, 2)
+              << " xc:" << Misc::hex(disk->pram.v.x_coarse, 2)
+              << " yf:" << Misc::hex(disk->pram.v.y, 2)
+              << " nty:" << Misc::hex(disk->pram.v.nty, 2)
+              << " ntx:" << Misc::hex(disk->pram.v.ntx, 2) << std::endl;
+}
+
+void PPU::PrintTile() {
+    std::cout << "Tile: id:" << Misc::hex(bg_tile_id, 2)
+              << " attr:" << Misc::hex(bg_tile_attr, 2)
+              << " lo:" << Misc::hex(bg_tile_lo, 2)
+              << " hi:" << Misc::hex(bg_tile_hi, 2) << std::endl;
+}
+
+// Print scanline and cycle
+void PPU::PrintXY() {
+    std::cout << "Y:" << Misc::hex(scanline, 2) << " X:" << Misc::hex(cycle, 2)
+              << std::endl;
+}
+
 // TODO: shared_ptr
 void PPU::Mount(const Disk &disk) { this->disk = (Disk *)&disk; }
 
@@ -137,11 +170,17 @@ void PPU::RunCycle() {
 
     uint8_t color =
         disk->ReadPBus(0x3F00 + (bg_palette << 2) + bg_pixel) & 0x3F;
-    // std::cout << Misc::hex(color, 2) << "; Palette:" << Misc::hex(bg_palette, 2)
-    //           << "; Pixel:" << Misc::hex(bg_pixel, 2) << std::endl;
     set_pixel(image, cycle - 1, scanline, color);
-    // fake rendering
+
+    // Debugging
     // set_pixel(image, cycle - 1, scanline, (rand() % 2) ? 0x3F : 0x30);
+    // std::cout << Misc::hex(color, 2) << "; Palette:" << Misc::hex(bg_palette,
+    // 2)
+    //           << "; Pixel:" << Misc::hex(bg_pixel, 2) << std::endl;
+    // PrintNT();
+    // std::cout << Misc::hex(disk->pram.v.y, 2) << std::endl;
+    // PrintTile();
+    // std::cout << Misc::hex((disk->pram.v.reg & 0x0FFF), 4) << std::endl;
 
     cycle++;
     if (cycle >= 341) {

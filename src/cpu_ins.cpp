@@ -62,12 +62,10 @@ void CPU::Reset() {
     // reset registers and flags
     RA = RX = RY = 0x00;
     SP = SP_INIT;
+    TDAT = TABS = TREL = 0x0000;
 
-    // original: RF.reg = 0b00100000;
-    // Also set I flag to 1 to algin with the nestest
-    RF.reg = 0b00100100;
-    // TBD: 7 or 8 cycles?
-    cycles = 7;
+    RF.reg = 0b00100000;
+    cycles = 8;
     cyc_count = 0;
 }
 
