@@ -21,6 +21,11 @@ void NES::Load(const std::string &file) {
     ppu.Mount(*disk);
     cpu.Reset();
     ppu.Reset();
+    // // debug: add initial snow-screen
+    // for (uint16_t i = 0x2000; i < 0x3000; i++) {
+    //     Byte data = (rand() % 2) ? 0x3F : 0x30;
+    //     disk->WritePBus(i, data);
+    // }
 }
 
 void NES::RunCycle() {
@@ -33,6 +38,16 @@ void NES::RunCycle() {
         cpu.NMI();
     }
     cycles++;
+}
+
+void NES::RunFrame() {
+    do {
+        RunCycle();
+    } while (!ppu.frame_complete);
+    do {
+        RunCycle();
+    } while (!(cpu.cycles == 0));
+    ppu.frame_complete = false;
 }
 
 void NES::Run() {
@@ -52,7 +67,7 @@ void NES::Run() {
                 return;
             } else if (event.type == sf::Event::GainedFocus) {
                 cpu.Reset();
-                ppu.Reset();
+                // ppu.Reset();
             }
         }
 

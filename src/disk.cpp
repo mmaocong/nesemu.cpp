@@ -76,8 +76,8 @@ void Disk::Attach(const std::string &cart) {
     }
 
     // update PRG/CHR size
-    prg_kb = header.n_chunk_prg * 16; // 16kb chunks
-    chr_kb = header.n_chunk_chr * 8;  // 8kb chunks
+    prg_kb = MAX(1, header.n_chunk_prg) * 16; // 16kb chunks
+    chr_kb = MAX(1, header.n_chunk_chr) * 8;  // 8kb chunks
 
     // restrict for now:
     // - 32KB PRG-ROM
@@ -86,10 +86,10 @@ void Disk::Attach(const std::string &cart) {
         throw std::runtime_error(
             "Unsupported PRG-ROM size: " + std::to_string(prg_kb) + "KB");
     }
-    if (chr_kb > 8) {
-        throw std::runtime_error(
-            "Unsupported CHR-ROM size: " + std::to_string(chr_kb) + "KB");
-    }
+    // if (chr_kb > 8) {
+    //     throw std::runtime_error(
+    //         "Unsupported CHR-ROM size: " + std::to_string(chr_kb) + "KB");
+    // }
 
     // read prg rom
     prg.resize(prg_kb * 1024);

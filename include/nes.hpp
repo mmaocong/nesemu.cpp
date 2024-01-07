@@ -19,6 +19,7 @@ struct NES {
 
     void Load(const std::string &);
     void RunCycle();
+    void RunFrame();
 
     void Run();
 };

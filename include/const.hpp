@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) < (b) ? (b) : (a))
 
 using Byte = uint8_t;
 using Word = uint16_t;
