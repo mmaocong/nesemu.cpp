@@ -67,6 +67,13 @@ void CPU::Reset() {
     RF.reg = 0b00100000;
     cycles = 8;
     cyc_count = 0;
+
+    addr = 0xFFFF;
+    mode = AddrMode::UNK;
+    instr = Instruct::UNK;
+    n_param = 0;
+    lhs = 0;
+    rhs = 0;
 }
 
 // Interrupt request.
@@ -183,6 +190,16 @@ void CPU::AND() {
     RF.SetN(RA);
 }
 
+// Instruction: Bitwise Logic AND (IMM mode).
+//
+// same as AND, only for IMM mode
+void CPU::ANI() {
+    RA &= lhs;
+    // set flags
+    RF.SetZ(RA);
+    RF.SetN(RA);
+}
+
 // Instruction: Bytewise Logical OR
 //
 // - A = A | M
@@ -197,6 +214,17 @@ void CPU::ORA() {
     RF.SetN(RA);
 }
 
+// Instruction: Bytewise Logical OR (IMM mode).
+//
+// same as ORA, only for IMM mode
+void CPU::ORI() {
+    RA |= lhs;
+
+    // set flags
+    RF.SetZ(RA);
+    RF.SetN(RA);
+}
+
 // Instruction: Bitwise Logic XOR.
 //
 // - A = A xor M
@@ -204,6 +232,15 @@ void CPU::ORA() {
 void CPU::EOR() {
     Byte val = disk->ReadMBus(TABS);
     RA ^= val;
+    RF.SetZ(RA);
+    RF.SetN(RA);
+}
+
+// Instruction: Bitwise Logic XOR (IMM mode).
+//
+// same as EOR, only for IMM mode
+void CPU::EOI() {
+    RA ^= lhs;
     RF.SetZ(RA);
     RF.SetN(RA);
 }
@@ -474,6 +511,22 @@ void CPU::ADC() {
     RA = res & 0x00FF;
 }
 
+// Instruction: Add with Carry (IMM mode).
+//
+// same as ADC, only for IMM mode
+void CPU::ADI() {
+    // R = A + M + C
+    uint16_t res = (uint16_t)RA + (uint16_t)lhs + (uint16_t)RF.C;
+    // set flags
+    RF.C = res > 0xFF;
+    RF.SetZ(res);
+    RF.SetN(res);
+    RF.V = ((~((uint16_t)RA ^ (uint16_t)lhs) & ((uint16_t)RA ^ res)) &
+            (1 << 7)) != 0;
+    // store result in accumulator
+    RA = res & 0x00FF;
+}
+
 // Instruction: Subtract with Borrow.
 //
 // - A = A - M - (1 - C) = A + (-M - 1) + C
@@ -482,6 +535,24 @@ void CPU::SBC() {
     // fetch data from absolute address, and invert the bottom 8 bits
     // val := -M - 1
     uint16_t val = disk->ReadMBus(TABS) ^ 0x00FF;
+    // R = A + (-M - 1) + C
+    uint16_t res = (uint16_t)RA + val + (uint16_t)RF.C;
+    // set flags
+    RF.C = (res & 0xFF00) != 0;
+    RF.SetZ(res);
+    RF.SetN(res);
+    RF.V = ((res ^ (uint16_t)RA) & (res ^ val) & (1 << 7)) != 0;
+    // store result in accumulator
+    RA = res & 0x00FF;
+}
+
+// Instruction: Subtract with Borrow (IMM mode).
+//
+// same as SBC, only for IMM mode
+void CPU::SBI() {
+    // fetch data from absolute address, and invert the bottom 8 bits
+    // val := -M - 1
+    uint16_t val = lhs ^ 0x00FF;
     // R = A + (-M - 1) + C
     uint16_t res = (uint16_t)RA + val + (uint16_t)RF.C;
     // set flags
@@ -516,7 +587,7 @@ void CPU::LSR() {
 // Same as LSR except that the result is stored in the accumulator
 void CPU::LRA() {
     // fetch data from absolute address
-    uint16_t val = disk->ReadMBus(TABS);
+    uint16_t val = RA;
     // set C flag
     RF.C = (val & 0x0001) != 0;
     // shift right
@@ -546,8 +617,8 @@ void CPU::ASL() {
 // Instruction: Arithmetic Shift Left (IMP mode).
 // Same as ASL except that the result is stored in the accumulator
 void CPU::ALA() {
-    // fetch data from absolute address and shift left
-    uint16_t val = disk->ReadMBus(TABS) << 1;
+    // fetch data from accumulator and shift left
+    uint16_t val = RA << 1;
     // set flags
     RF.C = (val & 0xFF00) != 0;
     RF.SetZ(val);
@@ -576,8 +647,8 @@ void CPU::ROL() {
 // Instruction: Rotate Left (IMP mode).
 // Same as ROL except that the result is stored in the accumulator
 void CPU::RLA() {
-    // f
-    uint16_t val = disk->ReadMBus(TABS) << 1 | (uint16_t)RF.C;
+    // fetch from accumulator
+    uint16_t val = RA << 1 | (uint16_t)RF.C;
     // set flags
     RF.C = (val & 0xFF00) != 0;
     RF.SetZ(val);
@@ -607,7 +678,7 @@ void CPU::ROR() {
 // Same as ROR except that the result is stored in the accumulator
 void CPU::RRA() {
     // fetch data from absolute address
-    Byte val = disk->ReadMBus(TABS);
+    Byte val = RA;
     // rotate right
     uint16_t res = (val >> 1) | (RF.C << 7);
     // set flags
@@ -672,6 +743,15 @@ void CPU::LDY() {
     RF.SetN(RY);
 }
 
+// Instruction: Load The Y Register (IMM mode).
+//
+// same as LDY, only for IMM mode
+void CPU::LYI() {
+    RY = lhs;
+    RF.SetZ(RY);
+    RF.SetN(RY);
+}
+
 // Instruction: Load The Accumulator.
 //
 // - A := M
@@ -682,12 +762,30 @@ void CPU::LDA() {
     RF.SetN(RA);
 }
 
+// Instruction: Load The Accumulator (IMM mode).
+//
+// same as LDA, only for IMM mode
+void CPU::LAI() {
+    RA = lhs;
+    RF.SetZ(RA);
+    RF.SetN(RA);
+}
+
 // Instruction: Load The X Register.
 //
 // - X := M
 // - Flags: N, Z
 void CPU::LDX() {
     RX = disk->ReadMBus(TABS);
+    RF.SetZ(RX);
+    RF.SetN(RX);
+}
+
+// Instruction: Load The X Register (IMM mode).
+//
+// same as LDX, only for IMM mode
+void CPU::LXI() {
+    RX = lhs;
     RF.SetZ(RX);
     RF.SetN(RX);
 }
@@ -741,6 +839,18 @@ void CPU::CPY() {
     RF.SetN(tmp);
 }
 
+// Instruction: Compare Y Register (IMM mode).
+//
+// same as CPY, only for IMM mode
+void CPU::CYI() {
+    // fetch data from absolute address
+    uint16_t tmp = (uint16_t)RY - (uint16_t)lhs;
+    // set flags
+    RF.C = RY >= lhs;
+    RF.SetZ(tmp);
+    RF.SetN(tmp);
+}
+
 // Instruction: Compare Accumulator.
 //
 // - C := A >= M
@@ -756,6 +866,18 @@ void CPU::CMP() {
     RF.SetN(tmp);
 }
 
+// Instruction: Compare Accumulator (IMM mode).
+//
+// same as CMP, only for IMM mode
+void CPU::CMI() {
+    // fetch data from absolute address
+    uint16_t tmp = (uint16_t)RA - (uint16_t)lhs;
+    // set flags
+    RF.C = RA >= lhs;
+    RF.SetZ(tmp);
+    RF.SetN(tmp);
+}
+
 // Instruction: Compare X Register.
 //
 // - C := X >= M
@@ -767,6 +889,18 @@ void CPU::CPX() {
     uint16_t tmp = (uint16_t)RX - (uint16_t)val;
     // set flags
     RF.C = RX >= val;
+    RF.SetZ(tmp);
+    RF.SetN(tmp);
+}
+
+// Instruction: Compare X Register (IMM mode).
+//
+// same as CPX, only for IMM mode
+void CPU::CXI() {
+    // fetch data from absolute address
+    uint16_t tmp = (uint16_t)RX - (uint16_t)lhs;
+    // set flags
+    RF.C = RX >= lhs;
     RF.SetZ(tmp);
     RF.SetN(tmp);
 }

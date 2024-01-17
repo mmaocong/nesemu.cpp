@@ -4,350 +4,334 @@
 #include "cpu.hpp"
 #include "misc.hpp"
 
-// address mode
-enum class AddrMode : uint8_t {
-    UNK = 0, // Unknown
-    IMP,     // Implied, assume RA as operand, no data fetched
-    IMM,     // Immediate
-    ZPG,     // Zero Page
-    ZPX,     // Zero Page, X
-    ZPY,     // Zero Page, Y
-    REL,     // Relative
-    ABS,     // Absolute
-    ABX,     // Absolute, X
-    ABY,     // Absolute, Y
-    IND,     // Indirect
-    IZX,     // Indexed Indirect, X
-    IZY,     // Indirect Indexed, Y
+// map addressing mode to string name
+// unofficial modes will have the standard names
+static const std::vector<std::string> map_str_addrmode = {
+    "UNK", "IMP", "IMM", "ZPG", "ZPX", "ZPY", "REL", "ABS",
+    "ABX", "ABX", "ABY", "ABY", "IND", "IZX", "IZY", "IZY",
 };
 
-enum class Instruct : uint8_t {
-    UNK = 0, // Unknown
-    BRK,
-    ORA,
-    XXX,
-    NOP,
-    ASL,
-    PHP,
-    CLC,
-    JSR,
-    BIT,
-    AND,
-    ROL,
-    PLP,
-    BMI,
-    SEC,
-    RTI,
-    EOR,
-    LSR,
-    PHA,
-    JMP,
-    BVC,
-    CLI,
-    RTS,
-    ADC,
-    ROR,
-    PLA,
-    BVS,
-    SEI,
-    STA,
-    STY,
-    STX,
-    DEY,
-    TXA,
-    BCC,
-    TYA,
-    TXS,
-    LDY,
-    LDA,
-    LDX,
-    TAY,
-    TAX,
-    BCS,
-    CLV,
-    TSX,
-    CPY,
-    CMP,
-    DEC,
-    INY,
-    DEX,
-    BNE,
-    CLD,
-    CPX,
-    SBC,
-    INC,
-    INX,
-    BEQ,
-    SED,
-    BPL,
+// map addressing mode to function pointer
+static const std::vector<void (CPU::*)(void)> map_func_addrmode = {
+    &CPU::XXX, &CPU::IMP, &CPU::IMM, &CPU::ZPG, &CPU::ZPX, &CPU::ZPY,
+    &CPU::REL, &CPU::ABS, &CPU::ABX, &CPU::AXP, &CPU::ABY, &CPU::AYP,
+    &CPU::IND, &CPU::IZX, &CPU::IZY, &CPU::IYP,
 };
 
+// map addressing mode to number of addresses to read.
+// This is to indicate whether the operation is nullary, unary, or binary.
+static const std::vector<uint8_t> map_addrs = {
+    0, // UNK
+    0, // IMP
+    1, // IMM
+    1, // ZPG
+    1, // ZPX
+    1, // ZPY
+    1, // REL
+    2, // ABS
+    2, // ABX
+    2, // AXP
+    2, // ABY
+    2, // AYP
+    2, // IND
+    1, // IZX
+    1, // IZY
+    1, // IYP
+};
+
+// map instruction to string name
+// unofficial instructions will have the standard names
+static const std::vector<std::string> map_str_instruct = {
+    "UNK", "BRK", "ORA", "ORA", "XXX", "NOP", "ASL", "ASL", "PHP", "CLC", "JSR",
+    "BIT", "AND", "AND", "ROL", "ROL", "PLP", "BMI", "SEC", "RTI", "EOR", "EOR",
+    "LSR", "LSR", "PHA", "JMP", "BVC", "CLI", "RTS", "ADC", "ADC", "ROR", "ROR",
+    "PLA", "BVS", "SEI", "STA", "STY", "STX", "DEY", "TXA", "BCC", "TYA", "TXS",
+    "LDY", "LDY", "LDA", "LDA", "LDX", "LDX", "TAY", "TAX", "BCS", "CLV", "TSX",
+    "CPY", "CPY", "CMP", "CMP", "DEC", "INY", "DEX", "BNE", "CLD", "CPX", "CPX",
+    "SBC", "SBC", "INC", "INX", "BEQ", "SED", "BPL",
+};
+
+// map instruction to function pointer
+static const std::vector<void (CPU::*)(void)> map_func_instruct = {
+    &CPU::XXX, &CPU::BRK, &CPU::ORA, &CPU::ORI, &CPU::XXX, &CPU::NOP, &CPU::ASL,
+    &CPU::ALA, &CPU::PHP, &CPU::CLC, &CPU::JSR, &CPU::BIT, &CPU::AND, &CPU::ANI,
+    &CPU::ROL, &CPU::RLA, &CPU::PLP, &CPU::BMI, &CPU::SEC, &CPU::RTI, &CPU::EOR,
+    &CPU::EOI, &CPU::LSR, &CPU::LRA, &CPU::PHA, &CPU::JMP, &CPU::BVC, &CPU::CLI,
+    &CPU::RTS, &CPU::ADC, &CPU::ADI, &CPU::ROR, &CPU::RRA, &CPU::PLA, &CPU::BVS,
+    &CPU::SEI, &CPU::STA, &CPU::STY, &CPU::STX, &CPU::DEY, &CPU::TXA, &CPU::BCC,
+    &CPU::TYA, &CPU::TXS, &CPU::LDY, &CPU::LYI, &CPU::LDA, &CPU::LAI, &CPU::LDX,
+    &CPU::LXI, &CPU::TAY, &CPU::TAX, &CPU::BCS, &CPU::CLV, &CPU::TSX, &CPU::CPY,
+    &CPU::CYI, &CPU::CMP, &CPU::CMI, &CPU::DEC, &CPU::INY, &CPU::DEX, &CPU::BNE,
+    &CPU::CLD, &CPU::CPX, &CPU::CXI, &CPU::SBC, &CPU::SBI, &CPU::INC, &CPU::INX,
+    &CPU::BEQ, &CPU::SED, &CPU::BPL,
+};
+
+// operation
+// bridge between the 8-bit opcode and the addressing mode + instruct
 struct Operation {
-    void (CPU::*func_instruct)(void) = nullptr;
-    void (CPU::*func_addrmode)(void) = nullptr;
     Instruct instruct = Instruct::UNK;
     AddrMode addrmode = AddrMode::UNK;
     uint8_t cycles = 0;
-    char name[4] = "XXX";
 };
 
-static const std::vector<Operation> lookup = {
-    {&CPU::BRK, &CPU::IMM, Instruct::BRK, AddrMode::IMM, 7, "BRK"},
-    {&CPU::ORA, &CPU::IZX, Instruct::ORA, AddrMode::IZX, 6, "ORA"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::ZPG, Instruct::NOP, AddrMode::ZPG, 3, "XXX"},
-    {&CPU::ORA, &CPU::ZPG, Instruct::ORA, AddrMode::ZPG, 3, "ORA"},
-    {&CPU::ASL, &CPU::ZPG, Instruct::ASL, AddrMode::ZPG, 5, "ASL"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 5, "XXX"},
-    {&CPU::PHP, &CPU::IMP, Instruct::PHP, AddrMode::IMP, 3, "PHP"},
-    {&CPU::ORA, &CPU::IMM, Instruct::ORA, AddrMode::IMM, 2, "ORA"},
-    {&CPU::ALA, &CPU::IMP, Instruct::ASL, AddrMode::IMP, 2, "ASL"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::ABS, Instruct::NOP, AddrMode::ABS, 4, "XXX"},
-    {&CPU::ORA, &CPU::ABS, Instruct::ORA, AddrMode::ABS, 4, "ORA"},
-    {&CPU::ASL, &CPU::ABS, Instruct::ASL, AddrMode::ABS, 6, "ASL"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
-    {&CPU::BPL, &CPU::REL, Instruct::BPL, AddrMode::REL, 2, "BPL"},
-    {&CPU::ORA, &CPU::IZY, Instruct::ORA, AddrMode::IZY, 5, "ORA"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::ZPX, Instruct::NOP, AddrMode::ZPX, 4, "XXX"},
-    {&CPU::ORA, &CPU::ZPX, Instruct::ORA, AddrMode::ZPX, 4, "ORA"},
-    {&CPU::ASL, &CPU::ZPX, Instruct::ASL, AddrMode::ZPX, 6, "ASL"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
-    {&CPU::CLC, &CPU::IMP, Instruct::CLC, AddrMode::IMP, 2, "CLC"},
-    {&CPU::ORA, &CPU::ABY, Instruct::ORA, AddrMode::ABY, 4, "ORA"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::XXX, &CPU::ABX, Instruct::NOP, AddrMode::ABX, 4, "XXX"},
-    {&CPU::ORA, &CPU::ABX, Instruct::ORA, AddrMode::ABX, 4, "ORA"},
-    {&CPU::ASL, &CPU::AXP, Instruct::ASL, AddrMode::ABX, 7, "ASL"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::JSR, &CPU::ABS, Instruct::JSR, AddrMode::ABS, 6, "JSR"},
-    {&CPU::AND, &CPU::IZX, Instruct::AND, AddrMode::IZX, 6, "AND"},
-    {&CPU::XXX, &CPU::ZPX, Instruct::XXX, AddrMode::ZPX, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::BIT, &CPU::ZPG, Instruct::BIT, AddrMode::ZPG, 3, "BIT"},
-    {&CPU::AND, &CPU::ZPG, Instruct::AND, AddrMode::ZPG, 3, "AND"},
-    {&CPU::ROL, &CPU::ZPG, Instruct::ROL, AddrMode::ZPG, 5, "ROL"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 5, "XXX"},
-    {&CPU::PLP, &CPU::IMP, Instruct::PLP, AddrMode::IMP, 4, "PLP"},
-    {&CPU::AND, &CPU::IMM, Instruct::AND, AddrMode::IMM, 2, "AND"},
-    {&CPU::RLA, &CPU::IMP, Instruct::ROL, AddrMode::IMP, 2, "ROL"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::BIT, &CPU::ABS, Instruct::BIT, AddrMode::ABS, 4, "BIT"},
-    {&CPU::AND, &CPU::ABS, Instruct::AND, AddrMode::ABS, 4, "AND"},
-    {&CPU::ROL, &CPU::ABS, Instruct::ROL, AddrMode::ABS, 6, "ROL"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
-    {&CPU::BMI, &CPU::REL, Instruct::BMI, AddrMode::REL, 2, "BMI"},
-    {&CPU::AND, &CPU::IZY, Instruct::AND, AddrMode::IZY, 5, "AND"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::ZPX, Instruct::NOP, AddrMode::ZPX, 4, "XXX"},
-    {&CPU::AND, &CPU::ZPX, Instruct::AND, AddrMode::ZPX, 4, "AND"},
-    {&CPU::ROL, &CPU::ZPX, Instruct::ROL, AddrMode::ZPX, 6, "ROL"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
-    {&CPU::SEC, &CPU::IMP, Instruct::SEC, AddrMode::IMP, 2, "SEC"},
-    {&CPU::AND, &CPU::ABY, Instruct::AND, AddrMode::ABY, 4, "AND"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::XXX, &CPU::ABX, Instruct::NOP, AddrMode::ABX, 4, "XXX"},
-    {&CPU::AND, &CPU::ABX, Instruct::AND, AddrMode::ABX, 4, "AND"},
-    {&CPU::ROL, &CPU::AXP, Instruct::ROL, AddrMode::ABX, 7, "ROL"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::RTI, &CPU::IMP, Instruct::RTI, AddrMode::IMP, 6, "RTI"},
-    {&CPU::EOR, &CPU::IZX, Instruct::EOR, AddrMode::IZX, 6, "EOR"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::ZPG, Instruct::NOP, AddrMode::ZPG, 3, "XXX"},
-    {&CPU::EOR, &CPU::ZPG, Instruct::EOR, AddrMode::ZPG, 3, "EOR"},
-    {&CPU::LSR, &CPU::ZPG, Instruct::LSR, AddrMode::ZPG, 5, "LSR"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 5, "XXX"},
-    {&CPU::PHA, &CPU::IMP, Instruct::PHA, AddrMode::IMP, 3, "PHA"},
-    {&CPU::EOR, &CPU::IMM, Instruct::EOR, AddrMode::IMM, 2, "EOR"},
-    {&CPU::LRA, &CPU::IMP, Instruct::LSR, AddrMode::IMP, 2, "LSR"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::JMP, &CPU::ABS, Instruct::JMP, AddrMode::ABS, 3, "JMP"},
-    {&CPU::EOR, &CPU::ABS, Instruct::EOR, AddrMode::ABS, 4, "EOR"},
-    {&CPU::LSR, &CPU::ABS, Instruct::LSR, AddrMode::ABS, 6, "LSR"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
-    {&CPU::BVC, &CPU::REL, Instruct::BVC, AddrMode::REL, 2, "BVC"},
-    {&CPU::EOR, &CPU::IZY, Instruct::EOR, AddrMode::IZY, 5, "EOR"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::ZPX, Instruct::NOP, AddrMode::ZPX, 4, "XXX"},
-    {&CPU::EOR, &CPU::ZPX, Instruct::EOR, AddrMode::ZPX, 4, "EOR"},
-    {&CPU::LSR, &CPU::ZPX, Instruct::LSR, AddrMode::ZPX, 6, "LSR"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
-    {&CPU::CLI, &CPU::IMP, Instruct::CLI, AddrMode::IMP, 2, "CLI"},
-    {&CPU::EOR, &CPU::ABY, Instruct::EOR, AddrMode::ABY, 4, "EOR"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::XXX, &CPU::ABX, Instruct::NOP, AddrMode::ABX, 4, "XXX"},
-    {&CPU::EOR, &CPU::ABX, Instruct::EOR, AddrMode::ABX, 4, "EOR"},
-    {&CPU::LSR, &CPU::AXP, Instruct::LSR, AddrMode::ABX, 7, "LSR"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::RTS, &CPU::IMP, Instruct::RTS, AddrMode::IMP, 6, "RTS"},
-    {&CPU::ADC, &CPU::IZX, Instruct::ADC, AddrMode::IZX, 6, "ADC"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::ZPG, Instruct::NOP, AddrMode::ZPG, 3, "XXX"},
-    {&CPU::ADC, &CPU::ZPG, Instruct::ADC, AddrMode::ZPG, 3, "ADC"},
-    {&CPU::ROR, &CPU::ZPG, Instruct::ROR, AddrMode::ZPG, 5, "ROR"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 5, "XXX"},
-    {&CPU::PLA, &CPU::IMP, Instruct::PLA, AddrMode::IMP, 4, "PLA"},
-    {&CPU::ADC, &CPU::IMM, Instruct::ADC, AddrMode::IMM, 2, "ADC"},
-    {&CPU::RRA, &CPU::IMP, Instruct::ROR, AddrMode::IMP, 2, "ROR"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::JMP, &CPU::IND, Instruct::JMP, AddrMode::IND, 5, "JMP"},
-    {&CPU::ADC, &CPU::ABS, Instruct::ADC, AddrMode::ABS, 4, "ADC"},
-    {&CPU::ROR, &CPU::ABS, Instruct::ROR, AddrMode::ABS, 6, "ROR"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
-    {&CPU::BVS, &CPU::REL, Instruct::BVS, AddrMode::REL, 2, "BVS"},
-    {&CPU::ADC, &CPU::IZY, Instruct::ADC, AddrMode::IZY, 5, "ADC"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::ZPX, Instruct::NOP, AddrMode::ZPX, 4, "XXX"},
-    {&CPU::ADC, &CPU::ZPX, Instruct::ADC, AddrMode::ZPX, 4, "ADC"},
-    {&CPU::ROR, &CPU::ZPX, Instruct::ROR, AddrMode::ZPX, 6, "ROR"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
-    {&CPU::SEI, &CPU::IMP, Instruct::SEI, AddrMode::IMP, 2, "SEI"},
-    {&CPU::ADC, &CPU::ABY, Instruct::ADC, AddrMode::ABY, 4, "ADC"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::XXX, &CPU::ABX, Instruct::NOP, AddrMode::ABX, 4, "XXX"},
-    {&CPU::ADC, &CPU::ABX, Instruct::ADC, AddrMode::ABX, 4, "ADC"},
-    {&CPU::ROR, &CPU::AXP, Instruct::ROR, AddrMode::ABX, 7, "ROR"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::XXX, &CPU::IMM, Instruct::NOP, AddrMode::IMM, 2, "XXX"},
-    {&CPU::STA, &CPU::IZX, Instruct::STA, AddrMode::IZX, 6, "STA"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
-    {&CPU::STY, &CPU::ZPG, Instruct::STY, AddrMode::ZPG, 3, "STY"},
-    {&CPU::STA, &CPU::ZPG, Instruct::STA, AddrMode::ZPG, 3, "STA"},
-    {&CPU::STX, &CPU::ZPG, Instruct::STX, AddrMode::ZPG, 3, "STX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 3, "XXX"},
-    {&CPU::DEY, &CPU::IMP, Instruct::DEY, AddrMode::IMP, 2, "DEY"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "XXX"},
-    {&CPU::TXA, &CPU::IMP, Instruct::TXA, AddrMode::IMP, 2, "TXA"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::STY, &CPU::ABS, Instruct::STY, AddrMode::ABS, 4, "STY"},
-    {&CPU::STA, &CPU::ABS, Instruct::STA, AddrMode::ABS, 4, "STA"},
-    {&CPU::STX, &CPU::ABS, Instruct::STX, AddrMode::ABS, 4, "STX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 4, "XXX"},
-    {&CPU::BCC, &CPU::REL, Instruct::BCC, AddrMode::REL, 2, "BCC"},
-    {&CPU::STA, &CPU::IYP, Instruct::STA, AddrMode::IZY, 6, "STA"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
-    {&CPU::STY, &CPU::ZPX, Instruct::STY, AddrMode::ZPX, 4, "STY"},
-    {&CPU::STA, &CPU::ZPX, Instruct::STA, AddrMode::ZPX, 4, "STA"},
-    {&CPU::STX, &CPU::ZPY, Instruct::STX, AddrMode::ZPY, 4, "STX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 4, "XXX"},
-    {&CPU::TYA, &CPU::IMP, Instruct::TYA, AddrMode::IMP, 2, "TYA"},
-    {&CPU::STA, &CPU::AYP, Instruct::STA, AddrMode::ABY, 5, "STA"},
-    {&CPU::TXS, &CPU::IMP, Instruct::TXS, AddrMode::IMP, 2, "TXS"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 5, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 5, "XXX"},
-    {&CPU::STA, &CPU::AXP, Instruct::STA, AddrMode::ABX, 5, "STA"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 5, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 5, "XXX"},
-    {&CPU::LDY, &CPU::IMM, Instruct::LDY, AddrMode::IMM, 2, "LDY"},
-    {&CPU::LDA, &CPU::IZX, Instruct::LDA, AddrMode::IZX, 6, "LDA"},
-    {&CPU::LDX, &CPU::IMM, Instruct::LDX, AddrMode::IMM, 2, "LDX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
-    {&CPU::LDY, &CPU::ZPG, Instruct::LDY, AddrMode::ZPG, 3, "LDY"},
-    {&CPU::LDA, &CPU::ZPG, Instruct::LDA, AddrMode::ZPG, 3, "LDA"},
-    {&CPU::LDX, &CPU::ZPG, Instruct::LDX, AddrMode::ZPG, 3, "LDX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 3, "XXX"},
-    {&CPU::TAY, &CPU::IMP, Instruct::TAY, AddrMode::IMP, 2, "TAY"},
-    {&CPU::LDA, &CPU::IMM, Instruct::LDA, AddrMode::IMM, 2, "LDA"},
-    {&CPU::TAX, &CPU::IMP, Instruct::TAX, AddrMode::IMP, 2, "TAX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::LDY, &CPU::ABS, Instruct::LDY, AddrMode::ABS, 4, "LDY"},
-    {&CPU::LDA, &CPU::ABS, Instruct::LDA, AddrMode::ABS, 4, "LDA"},
-    {&CPU::LDX, &CPU::ABS, Instruct::LDX, AddrMode::ABS, 4, "LDX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 4, "XXX"},
-    {&CPU::BCS, &CPU::REL, Instruct::BCS, AddrMode::REL, 2, "BCS"},
-    {&CPU::LDA, &CPU::IZY, Instruct::LDA, AddrMode::IZY, 5, "LDA"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 5, "XXX"},
-    {&CPU::LDY, &CPU::ZPX, Instruct::LDY, AddrMode::ZPX, 4, "LDY"},
-    {&CPU::LDA, &CPU::ZPX, Instruct::LDA, AddrMode::ZPX, 4, "LDA"},
-    {&CPU::LDX, &CPU::ZPY, Instruct::LDX, AddrMode::ZPY, 4, "LDX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 4, "XXX"},
-    {&CPU::CLV, &CPU::IMP, Instruct::CLV, AddrMode::IMP, 2, "CLV"},
-    {&CPU::LDA, &CPU::ABY, Instruct::LDA, AddrMode::ABY, 4, "LDA"},
-    {&CPU::TSX, &CPU::IMP, Instruct::TSX, AddrMode::IMP, 2, "TSX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 4, "XXX"},
-    {&CPU::LDY, &CPU::ABX, Instruct::LDY, AddrMode::ABX, 4, "LDY"},
-    {&CPU::LDA, &CPU::ABX, Instruct::LDA, AddrMode::ABX, 4, "LDA"},
-    {&CPU::LDX, &CPU::ABY, Instruct::LDX, AddrMode::ABY, 4, "LDX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 4, "XXX"},
-    {&CPU::CPY, &CPU::IMM, Instruct::CPY, AddrMode::IMM, 2, "CPY"},
-    {&CPU::CMP, &CPU::IZX, Instruct::CMP, AddrMode::IZX, 6, "CMP"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::CPY, &CPU::ZPG, Instruct::CPY, AddrMode::ZPG, 3, "CPY"},
-    {&CPU::CMP, &CPU::ZPG, Instruct::CMP, AddrMode::ZPG, 3, "CMP"},
-    {&CPU::DEC, &CPU::ZPG, Instruct::DEC, AddrMode::ZPG, 5, "DEC"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 5, "XXX"},
-    {&CPU::INY, &CPU::IMP, Instruct::INY, AddrMode::IMP, 2, "INY"},
-    {&CPU::CMP, &CPU::IMM, Instruct::CMP, AddrMode::IMM, 2, "CMP"},
-    {&CPU::DEX, &CPU::IMP, Instruct::DEX, AddrMode::IMP, 2, "DEX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::CPY, &CPU::ABS, Instruct::CPY, AddrMode::ABS, 4, "CPY"},
-    {&CPU::CMP, &CPU::ABS, Instruct::CMP, AddrMode::ABS, 4, "CMP"},
-    {&CPU::DEC, &CPU::ABS, Instruct::DEC, AddrMode::ABS, 6, "DEC"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
-    {&CPU::BNE, &CPU::REL, Instruct::BNE, AddrMode::REL, 2, "BNE"},
-    {&CPU::CMP, &CPU::IZY, Instruct::CMP, AddrMode::IZY, 5, "CMP"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::ZPX, Instruct::NOP, AddrMode::ZPX, 4, "XXX"},
-    {&CPU::CMP, &CPU::ZPX, Instruct::CMP, AddrMode::ZPX, 4, "CMP"},
-    {&CPU::DEC, &CPU::ZPX, Instruct::DEC, AddrMode::ZPX, 6, "DEC"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
-    {&CPU::CLD, &CPU::IMP, Instruct::CLD, AddrMode::IMP, 2, "CLD"},
-    {&CPU::CMP, &CPU::ABY, Instruct::CMP, AddrMode::ABY, 4, "CMP"},
-    {&CPU::NOP, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "NOP"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::XXX, &CPU::ABX, Instruct::NOP, AddrMode::ABX, 4, "XXX"},
-    {&CPU::CMP, &CPU::ABX, Instruct::CMP, AddrMode::ABX, 4, "CMP"},
-    {&CPU::DEC, &CPU::AXP, Instruct::DEC, AddrMode::ABX, 7, "DEC"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::CPX, &CPU::IMM, Instruct::CPX, AddrMode::IMM, 2, "CPX"},
-    {&CPU::SBC, &CPU::IZX, Instruct::SBC, AddrMode::IZX, 6, "SBC"},
-    {&CPU::XXX, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::CPX, &CPU::ZPG, Instruct::CPX, AddrMode::ZPG, 3, "CPX"},
-    {&CPU::SBC, &CPU::ZPG, Instruct::SBC, AddrMode::ZPG, 3, "SBC"},
-    {&CPU::INC, &CPU::ZPG, Instruct::INC, AddrMode::ZPG, 5, "INC"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 5, "XXX"},
-    {&CPU::INX, &CPU::IMP, Instruct::INX, AddrMode::IMP, 2, "INX"},
-    {&CPU::SBC, &CPU::IMM, Instruct::SBC, AddrMode::IMM, 2, "SBC"},
-    {&CPU::NOP, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "NOP"},
-    {&CPU::XXX, &CPU::IMP, Instruct::SBC, AddrMode::IMP, 2, "XXX"},
-    {&CPU::CPX, &CPU::ABS, Instruct::CPX, AddrMode::ABS, 4, "CPX"},
-    {&CPU::SBC, &CPU::ABS, Instruct::SBC, AddrMode::ABS, 4, "SBC"},
-    {&CPU::INC, &CPU::ABS, Instruct::INC, AddrMode::ABS, 6, "INC"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
-    {&CPU::BEQ, &CPU::REL, Instruct::BEQ, AddrMode::REL, 2, "BEQ"},
-    {&CPU::SBC, &CPU::IZY, Instruct::SBC, AddrMode::IZY, 5, "SBC"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 2, "XXX"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 8, "XXX"},
-    {&CPU::XXX, &CPU::ZPX, Instruct::NOP, AddrMode::ZPX, 4, "XXX"},
-    {&CPU::SBC, &CPU::ZPX, Instruct::SBC, AddrMode::ZPX, 4, "SBC"},
-    {&CPU::INC, &CPU::ZPX, Instruct::INC, AddrMode::ZPX, 6, "INC"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 6, "XXX"},
-    {&CPU::SED, &CPU::IMP, Instruct::SED, AddrMode::IMP, 2, "SED"},
-    {&CPU::SBC, &CPU::ABY, Instruct::SBC, AddrMode::ABY, 4, "SBC"},
-    {&CPU::NOP, &CPU::IMP, Instruct::NOP, AddrMode::IMP, 2, "NOP"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
-    {&CPU::XXX, &CPU::ABX, Instruct::NOP, AddrMode::ABX, 4, "XXX"},
-    {&CPU::SBC, &CPU::ABX, Instruct::SBC, AddrMode::ABX, 4, "SBC"},
-    {&CPU::INC, &CPU::AXP, Instruct::INC, AddrMode::ABX, 7, "INC"},
-    {&CPU::XXX, &CPU::IMP, Instruct::XXX, AddrMode::IMP, 7, "XXX"},
+// map opcode to corresponding addressing mode and instruction
+static const std::vector<Operation> map_op = {
+    {Instruct::BRK, AddrMode::IMM, 7}, // 0x00
+    {Instruct::ORA, AddrMode::IZX, 6}, // 0x01
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0x02
+    {Instruct::XXX, AddrMode::IMP, 8}, // 0x03
+    {Instruct::NOP, AddrMode::ZPG, 3}, // 0x04
+    {Instruct::ORA, AddrMode::ZPG, 3}, // 0x05
+    {Instruct::ASL, AddrMode::ZPG, 5}, // 0x06
+    {Instruct::XXX, AddrMode::IMP, 5}, // 0x07
+    {Instruct::PHP, AddrMode::IMP, 3}, // 0x08
+    {Instruct::ORI, AddrMode::IMM, 2}, // 0x09
+    {Instruct::ALA, AddrMode::IMP, 2}, // 0x0A
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0x0B
+    {Instruct::NOP, AddrMode::ABS, 4}, // 0x0C
+    {Instruct::ORA, AddrMode::ABS, 4}, // 0x0D
+    {Instruct::ASL, AddrMode::ABS, 6}, // 0x0E
+    {Instruct::XXX, AddrMode::IMP, 6}, // 0x0F
+    {Instruct::BPL, AddrMode::REL, 2}, // 0x10
+    {Instruct::ORA, AddrMode::IZY, 5}, // 0x11
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0x12
+    {Instruct::XXX, AddrMode::IMP, 8}, // 0x13
+    {Instruct::NOP, AddrMode::ZPX, 4}, // 0x14
+    {Instruct::ORA, AddrMode::ZPX, 4}, // 0x15
+    {Instruct::ASL, AddrMode::ZPX, 6}, // 0x16
+    {Instruct::XXX, AddrMode::IMP, 6}, // 0x17
+    {Instruct::CLC, AddrMode::IMP, 2}, // 0x18
+    {Instruct::ORA, AddrMode::ABY, 4}, // 0x19
+    {Instruct::NOP, AddrMode::IMP, 2}, // 0x1A
+    {Instruct::XXX, AddrMode::IMP, 7}, // 0x1B
+    {Instruct::NOP, AddrMode::ABX, 4}, // 0x1C
+    {Instruct::ORA, AddrMode::ABX, 4}, // 0x1D
+    {Instruct::ASL, AddrMode::AXP, 7}, // 0x1E
+    {Instruct::XXX, AddrMode::IMP, 7}, // 0x1F
+    {Instruct::JSR, AddrMode::ABS, 6}, // 0x20
+    {Instruct::AND, AddrMode::IZX, 6}, // 0x21
+    {Instruct::XXX, AddrMode::ZPX, 2}, // 0x22
+    {Instruct::XXX, AddrMode::IMP, 8}, // 0x23
+    {Instruct::BIT, AddrMode::ZPG, 3}, // 0x24
+    {Instruct::AND, AddrMode::ZPG, 3}, // 0x25
+    {Instruct::ROL, AddrMode::ZPG, 5}, // 0x26
+    {Instruct::XXX, AddrMode::IMP, 5}, // 0x27
+    {Instruct::PLP, AddrMode::IMP, 4}, // 0x28
+    {Instruct::ANI, AddrMode::IMM, 2}, // 0x29
+    {Instruct::RLA, AddrMode::IMP, 2}, // 0x2A
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0x2B
+    {Instruct::BIT, AddrMode::ABS, 4}, // 0x2C
+    {Instruct::AND, AddrMode::ABS, 4}, // 0x2D
+    {Instruct::ROL, AddrMode::ABS, 6}, // 0x2E
+    {Instruct::XXX, AddrMode::IMP, 6}, // 0x2F
+    {Instruct::BMI, AddrMode::REL, 2}, // 0x30
+    {Instruct::AND, AddrMode::IZY, 5}, // 0x31
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0x32
+    {Instruct::XXX, AddrMode::IMP, 8}, // 0x33
+    {Instruct::NOP, AddrMode::ZPX, 4}, // 0x34
+    {Instruct::AND, AddrMode::ZPX, 4}, // 0x35
+    {Instruct::ROL, AddrMode::ZPX, 6}, // 0x36
+    {Instruct::XXX, AddrMode::IMP, 6}, // 0x37
+    {Instruct::SEC, AddrMode::IMP, 2}, // 0x38
+    {Instruct::AND, AddrMode::ABY, 4}, // 0x39
+    {Instruct::NOP, AddrMode::IMP, 2}, // 0x3A
+    {Instruct::XXX, AddrMode::IMP, 7}, // 0x3B
+    {Instruct::NOP, AddrMode::ABX, 4}, // 0x3C
+    {Instruct::AND, AddrMode::ABX, 4}, // 0x3D
+    {Instruct::ROL, AddrMode::AXP, 7}, // 0x3E
+    {Instruct::XXX, AddrMode::IMP, 7}, // 0x3F
+    {Instruct::RTI, AddrMode::IMP, 6}, // 0x40
+    {Instruct::EOR, AddrMode::IZX, 6}, // 0x41
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0x42
+    {Instruct::XXX, AddrMode::IMP, 8}, // 0x43
+    {Instruct::NOP, AddrMode::ZPG, 3}, // 0x44
+    {Instruct::EOR, AddrMode::ZPG, 3}, // 0x45
+    {Instruct::LSR, AddrMode::ZPG, 5}, // 0x46
+    {Instruct::XXX, AddrMode::IMP, 5}, // 0x47
+    {Instruct::PHA, AddrMode::IMP, 3}, // 0x48
+    {Instruct::EOI, AddrMode::IMM, 2}, // 0x49
+    {Instruct::LRA, AddrMode::IMP, 2}, // 0x4A
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0x4B
+    {Instruct::JMP, AddrMode::ABS, 3}, // 0x4C
+    {Instruct::EOR, AddrMode::ABS, 4}, // 0x4D
+    {Instruct::LSR, AddrMode::ABS, 6}, // 0x4E
+    {Instruct::XXX, AddrMode::IMP, 6}, // 0x4F
+    {Instruct::BVC, AddrMode::REL, 2}, // 0x50
+    {Instruct::EOR, AddrMode::IZY, 5}, // 0x51
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0x52
+    {Instruct::XXX, AddrMode::IMP, 8}, // 0x53
+    {Instruct::NOP, AddrMode::ZPX, 4}, // 0x54
+    {Instruct::EOR, AddrMode::ZPX, 4}, // 0x55
+    {Instruct::LSR, AddrMode::ZPX, 6}, // 0x56
+    {Instruct::XXX, AddrMode::IMP, 6}, // 0x57
+    {Instruct::CLI, AddrMode::IMP, 2}, // 0x58
+    {Instruct::EOR, AddrMode::ABY, 4}, // 0x59
+    {Instruct::NOP, AddrMode::IMP, 2}, // 0x5A
+    {Instruct::XXX, AddrMode::IMP, 7}, // 0x5B
+    {Instruct::NOP, AddrMode::ABX, 4}, // 0x5C
+    {Instruct::EOR, AddrMode::ABX, 4}, // 0x5D
+    {Instruct::LSR, AddrMode::AXP, 7}, // 0x5E
+    {Instruct::XXX, AddrMode::IMP, 7}, // 0x5F
+    {Instruct::RTS, AddrMode::IMP, 6}, // 0x60
+    {Instruct::ADC, AddrMode::IZX, 6}, // 0x61
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0x62
+    {Instruct::XXX, AddrMode::IMP, 8}, // 0x63
+    {Instruct::NOP, AddrMode::ZPG, 3}, // 0x64
+    {Instruct::ADC, AddrMode::ZPG, 3}, // 0x65
+    {Instruct::ROR, AddrMode::ZPG, 5}, // 0x66
+    {Instruct::XXX, AddrMode::IMP, 5}, // 0x67
+    {Instruct::PLA, AddrMode::IMP, 4}, // 0x68
+    {Instruct::ADI, AddrMode::IMM, 2}, // 0x69
+    {Instruct::RRA, AddrMode::IMP, 2}, // 0x6A
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0x6B
+    {Instruct::JMP, AddrMode::IND, 5}, // 0x6C
+    {Instruct::ADC, AddrMode::ABS, 4}, // 0x6D
+    {Instruct::ROR, AddrMode::ABS, 6}, // 0x6E
+    {Instruct::XXX, AddrMode::IMP, 6}, // 0x6F
+    {Instruct::BVS, AddrMode::REL, 2}, // 0x70
+    {Instruct::ADC, AddrMode::IZY, 5}, // 0x71
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0x72
+    {Instruct::XXX, AddrMode::IMP, 8}, // 0x73
+    {Instruct::NOP, AddrMode::ZPX, 4}, // 0x74
+    {Instruct::ADC, AddrMode::ZPX, 4}, // 0x75
+    {Instruct::ROR, AddrMode::ZPX, 6}, // 0x76
+    {Instruct::XXX, AddrMode::IMP, 6}, // 0x77
+    {Instruct::SEI, AddrMode::IMP, 2}, // 0x78
+    {Instruct::ADC, AddrMode::ABY, 4}, // 0x79
+    {Instruct::NOP, AddrMode::IMP, 2}, // 0x7A
+    {Instruct::XXX, AddrMode::IMP, 7}, // 0x7B
+    {Instruct::NOP, AddrMode::ABX, 4}, // 0x7C
+    {Instruct::ADC, AddrMode::ABX, 4}, // 0x7D
+    {Instruct::ROR, AddrMode::AXP, 7}, // 0x7E
+    {Instruct::XXX, AddrMode::IMP, 7}, // 0x7F
+    {Instruct::NOP, AddrMode::IMM, 2}, // 0x80
+    {Instruct::STA, AddrMode::IZX, 6}, // 0x81
+    {Instruct::NOP, AddrMode::IMP, 2}, // 0x82
+    {Instruct::XXX, AddrMode::IMP, 6}, // 0x83
+    {Instruct::STY, AddrMode::ZPG, 3}, // 0x84
+    {Instruct::STA, AddrMode::ZPG, 3}, // 0x85
+    {Instruct::STX, AddrMode::ZPG, 3}, // 0x86
+    {Instruct::XXX, AddrMode::IMP, 3}, // 0x87
+    {Instruct::DEY, AddrMode::IMP, 2}, // 0x88
+    {Instruct::NOP, AddrMode::IMP, 2}, // 0x89
+    {Instruct::TXA, AddrMode::IMP, 2}, // 0x8A
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0x8B
+    {Instruct::STY, AddrMode::ABS, 4}, // 0x8C
+    {Instruct::STA, AddrMode::ABS, 4}, // 0x8D
+    {Instruct::STX, AddrMode::ABS, 4}, // 0x8E
+    {Instruct::XXX, AddrMode::IMP, 4}, // 0x8F
+    {Instruct::BCC, AddrMode::REL, 2}, // 0x90
+    {Instruct::STA, AddrMode::IYP, 6}, // 0x91
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0x92
+    {Instruct::XXX, AddrMode::IMP, 6}, // 0x93
+    {Instruct::STY, AddrMode::ZPX, 4}, // 0x94
+    {Instruct::STA, AddrMode::ZPX, 4}, // 0x95
+    {Instruct::STX, AddrMode::ZPY, 4}, // 0x96
+    {Instruct::XXX, AddrMode::IMP, 4}, // 0x97
+    {Instruct::TYA, AddrMode::IMP, 2}, // 0x98
+    {Instruct::STA, AddrMode::AYP, 5}, // 0x99
+    {Instruct::TXS, AddrMode::IMP, 2}, // 0x9A
+    {Instruct::XXX, AddrMode::IMP, 5}, // 0x9B
+    {Instruct::NOP, AddrMode::IMP, 5}, // 0x9C
+    {Instruct::STA, AddrMode::AXP, 5}, // 0x9D
+    {Instruct::XXX, AddrMode::IMP, 5}, // 0x9E
+    {Instruct::XXX, AddrMode::IMP, 5}, // 0x9F
+    {Instruct::LYI, AddrMode::IMM, 2}, // 0xA0
+    {Instruct::LDA, AddrMode::IZX, 6}, // 0xA1
+    {Instruct::LXI, AddrMode::IMM, 2}, // 0xA2
+    {Instruct::XXX, AddrMode::IMP, 6}, // 0xA3
+    {Instruct::LDY, AddrMode::ZPG, 3}, // 0xA4
+    {Instruct::LDA, AddrMode::ZPG, 3}, // 0xA5
+    {Instruct::LDX, AddrMode::ZPG, 3}, // 0xA6
+    {Instruct::XXX, AddrMode::IMP, 3}, // 0xA7
+    {Instruct::TAY, AddrMode::IMP, 2}, // 0xA8
+    {Instruct::LAI, AddrMode::IMM, 2}, // 0xA9
+    {Instruct::TAX, AddrMode::IMP, 2}, // 0xAA
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0xAB
+    {Instruct::LDY, AddrMode::ABS, 4}, // 0xAC
+    {Instruct::LDA, AddrMode::ABS, 4}, // 0xAD
+    {Instruct::LDX, AddrMode::ABS, 4}, // 0xAE
+    {Instruct::XXX, AddrMode::IMP, 4}, // 0xAF
+    {Instruct::BCS, AddrMode::REL, 2}, // 0xB0
+    {Instruct::LDA, AddrMode::IZY, 5}, // 0xB1
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0xB2
+    {Instruct::XXX, AddrMode::IMP, 5}, // 0xB3
+    {Instruct::LDY, AddrMode::ZPX, 4}, // 0xB4
+    {Instruct::LDA, AddrMode::ZPX, 4}, // 0xB5
+    {Instruct::LDX, AddrMode::ZPY, 4}, // 0xB6
+    {Instruct::XXX, AddrMode::IMP, 4}, // 0xB7
+    {Instruct::CLV, AddrMode::IMP, 2}, // 0xB8
+    {Instruct::LDA, AddrMode::ABY, 4}, // 0xB9
+    {Instruct::TSX, AddrMode::IMP, 2}, // 0xBA
+    {Instruct::XXX, AddrMode::IMP, 4}, // 0xBB
+    {Instruct::LDY, AddrMode::ABX, 4}, // 0xBC
+    {Instruct::LDA, AddrMode::ABX, 4}, // 0xBD
+    {Instruct::LDX, AddrMode::ABY, 4}, // 0xBE
+    {Instruct::XXX, AddrMode::IMP, 4}, // 0xBF
+    {Instruct::CYI, AddrMode::IMM, 2}, // 0xC0
+    {Instruct::CMP, AddrMode::IZX, 6}, // 0xC1
+    {Instruct::NOP, AddrMode::IMP, 2}, // 0xC2
+    {Instruct::XXX, AddrMode::IMP, 8}, // 0xC3
+    {Instruct::CPY, AddrMode::ZPG, 3}, // 0xC4
+    {Instruct::CMP, AddrMode::ZPG, 3}, // 0xC5
+    {Instruct::DEC, AddrMode::ZPG, 5}, // 0xC6
+    {Instruct::XXX, AddrMode::IMP, 5}, // 0xC7
+    {Instruct::INY, AddrMode::IMP, 2}, // 0xC8
+    {Instruct::CMI, AddrMode::IMM, 2}, // 0xC9
+    {Instruct::DEX, AddrMode::IMP, 2}, // 0xCA
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0xCB
+    {Instruct::CPY, AddrMode::ABS, 4}, // 0xCC
+    {Instruct::CMP, AddrMode::ABS, 4}, // 0xCD
+    {Instruct::DEC, AddrMode::ABS, 6}, // 0xCE
+    {Instruct::XXX, AddrMode::IMP, 6}, // 0xCF
+    {Instruct::BNE, AddrMode::REL, 2}, // 0xD0
+    {Instruct::CMP, AddrMode::IZY, 5}, // 0xD1
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0xD2
+    {Instruct::XXX, AddrMode::IMP, 8}, // 0xD3
+    {Instruct::NOP, AddrMode::ZPX, 4}, // 0xD4
+    {Instruct::CMP, AddrMode::ZPX, 4}, // 0xD5
+    {Instruct::DEC, AddrMode::ZPX, 6}, // 0xD6
+    {Instruct::XXX, AddrMode::IMP, 6}, // 0xD7
+    {Instruct::CLD, AddrMode::IMP, 2}, // 0xD8
+    {Instruct::CMP, AddrMode::ABY, 4}, // 0xD9
+    {Instruct::NOP, AddrMode::IMP, 2}, // 0xDA
+    {Instruct::XXX, AddrMode::IMP, 7}, // 0xDB
+    {Instruct::NOP, AddrMode::ABX, 4}, // 0xDC
+    {Instruct::CMP, AddrMode::ABX, 4}, // 0xDD
+    {Instruct::DEC, AddrMode::AXP, 7}, // 0xDE
+    {Instruct::XXX, AddrMode::IMP, 7}, // 0xDF
+    {Instruct::CXI, AddrMode::IMM, 2}, // 0xE0
+    {Instruct::SBC, AddrMode::IZX, 6}, // 0xE1
+    {Instruct::NOP, AddrMode::IMP, 2}, // 0xE2
+    {Instruct::XXX, AddrMode::IMP, 8}, // 0xE3
+    {Instruct::CPX, AddrMode::ZPG, 3}, // 0xE4
+    {Instruct::SBC, AddrMode::ZPG, 3}, // 0xE5
+    {Instruct::INC, AddrMode::ZPG, 5}, // 0xE6
+    {Instruct::XXX, AddrMode::IMP, 5}, // 0xE7
+    {Instruct::INX, AddrMode::IMP, 2}, // 0xE8
+    {Instruct::SBI, AddrMode::IMM, 2}, // 0xE9
+    {Instruct::NOP, AddrMode::IMP, 2}, // 0xEA
+    {Instruct::SBC, AddrMode::IMP, 2}, // 0xEB
+    {Instruct::CPX, AddrMode::ABS, 4}, // 0xEC
+    {Instruct::SBC, AddrMode::ABS, 4}, // 0xED
+    {Instruct::INC, AddrMode::ABS, 6}, // 0xEE
+    {Instruct::XXX, AddrMode::IMP, 6}, // 0xEF
+    {Instruct::BEQ, AddrMode::REL, 2}, // 0xF0
+    {Instruct::SBC, AddrMode::IZY, 5}, // 0xF1
+    {Instruct::XXX, AddrMode::IMP, 2}, // 0xF2
+    {Instruct::XXX, AddrMode::IMP, 8}, // 0xF3
+    {Instruct::NOP, AddrMode::ZPX, 4}, // 0xF4
+    {Instruct::SBC, AddrMode::ZPX, 4}, // 0xF5
+    {Instruct::INC, AddrMode::ZPX, 6}, // 0xF6
+    {Instruct::XXX, AddrMode::IMP, 6}, // 0xF7
+    {Instruct::SED, AddrMode::IMP, 2}, // 0xF8
+    {Instruct::SBC, AddrMode::ABY, 4}, // 0xF9
+    {Instruct::NOP, AddrMode::IMP, 2}, // 0xFA
+    {Instruct::XXX, AddrMode::IMP, 7}, // 0xFB
+    {Instruct::NOP, AddrMode::ABX, 4}, // 0xFC
+    {Instruct::SBC, AddrMode::ABX, 4}, // 0xFD
+    {Instruct::INC, AddrMode::AXP, 7}, // 0xFE
+    {Instruct::XXX, AddrMode::IMP, 7}, // 0xFF
 };
 
 // ----------------------------------------------------------------------------
@@ -382,82 +366,30 @@ CPU::~CPU() {}
 // TODO: shared_ptr
 void CPU::Mount(const Disk &disk) { this->disk = (Disk *)&disk; }
 
-// show one instruction
-void CPU::BinToAsm(const Mem &buffer, std::vector<std::string> &asmcode) {
-    uint16_t limit = MIN(buffer.size(), UINT16_MAX);
-    uint16_t addr = 0;
-    std::string ins;
-    while (addr < limit) {
-        ins = "$" + Misc::hex(addr, 4) + ": ";
-        Byte ind_op = buffer[addr++];
-        Operation op = lookup[ind_op];
-        ins = ins + op.name + " ";
-        Byte val, lo, hi;
-        switch (op.addrmode) {
-        case AddrMode::IMP:
-            // do NOT proceed the PC here
-            ins += "<IMP>";
-            break;
-        case AddrMode::IMM:
-            val = buffer[addr++];
-            ins += Misc::hex(val, 2) + " <IMM>";
-            break;
-        case AddrMode::ZPG:
-            lo = buffer[addr++];
-            hi = 0x00;
-            ins += Misc::hex(lo, 2) + " <ZPG>";
-            break;
-        case AddrMode::ZPX:
-            lo = buffer[addr++];
-            hi = 0x00;
-            ins += Misc::hex(lo, 2) + ",X <ZPX>";
-            break;
-        case AddrMode::ZPY:
-            lo = buffer[addr++];
-            hi = 0x00;
-            ins += Misc::hex(lo, 2) + ",Y <ZPY>";
-            break;
-        case AddrMode::REL:
-            val = buffer[addr++];
-            ins +=
-                Misc::hex(val, 2) + ", " + Misc::hex(addr + val, 4) + " <REL>";
-            break;
-        case AddrMode::ABS:
-            lo = buffer[addr++];
-            hi = buffer[addr++];
-            ins += "$" + Misc::hex(hi << 8 | lo, 4) + " <ABS>";
-            break;
-        case AddrMode::ABX:
-            lo = buffer[addr++];
-            hi = buffer[addr++];
-            ins += "$" + Misc::hex(hi << 8 | lo, 4) + ", X <ABX>";
-            break;
-        case AddrMode::ABY:
-            lo = buffer[addr++];
-            hi = buffer[addr++];
-            ins += "$" + Misc::hex(hi << 8 | lo, 4) + ", Y <ABY>";
-            break;
-        case AddrMode::IND:
-            lo = buffer[addr++];
-            hi = buffer[addr++];
-            ins += Misc::hex(hi << 8 | lo, 4) + " <IND>";
-            break;
-        case AddrMode::IZX:
-            lo = buffer[addr++];
-            hi = 0x00;
-            ins += "(" + Misc::hex(lo, 2) + ", X) <IZX>";
-            break;
-        case AddrMode::IZY:
-            lo = buffer[addr++];
-            hi = 0x00;
-            ins += "(" + Misc::hex(lo, 2) + ", Y) <IZY>";
-            break;
-        default:
-            addr++;
-            ins += " <UNK>";
-            break;
-        }
-        asmcode.push_back(ins);
+void CPU::Read() {
+    // update total cycles, used when initializing in combination with RunInstr
+    // TODO: remove this
+    cyc_count += cycles;
+    // update with new instruction
+    addr = PC;
+    Byte opcode = disk->ReadMBus(PC++);
+    Operation op = map_op[opcode];
+    mode = op.addrmode;
+    instr = op.instruct;
+    cycles = op.cycles;
+    n_param = map_addrs[(uint8_t)op.addrmode];
+    switch (n_param) {
+    case 0:
+        break;
+    case 1:
+        lhs = disk->ReadMBus(PC++);
+        break;
+    case 2:
+        lhs = disk->ReadMBus(PC++);
+        rhs = disk->ReadMBus(PC++);
+        break;
+    default:
+        break;
     }
 }
 
@@ -465,15 +397,12 @@ void CPU::BinToAsm(const Mem &buffer, std::vector<std::string> &asmcode) {
 void CPU::RunCycle() {
     if (cycles == 0) {
         // fetch
-        Byte ind_op = disk->ReadMBus(PC++);
+        Read();
         // set unused flag
         RF.U = 1;
-        Operation op = lookup[ind_op];
-        // update cycles
-        cycles = op.cycles;
         // execute
-        (this->*op.func_addrmode)();
-        (this->*op.func_instruct)();
+        (this->*map_func_addrmode[(uint8_t)mode])();
+        (this->*map_func_instruct[(uint8_t)instr])();
         // set unused flag
         RF.U = 1;
     }
@@ -483,50 +412,49 @@ void CPU::RunCycle() {
 
 // Run a complete instruction and return the number of cycles it takes
 void CPU::RunInstr() {
-    Byte opcode = disk->ReadMBus(PC++);
-    Operation op = lookup[opcode];
-    // execute
     RF.U = 1;
-    (this->*op.func_addrmode)();
-    (this->*op.func_instruct)();
+    (this->*map_func_addrmode[(uint8_t)mode])();
+    (this->*map_func_instruct[(uint8_t)instr])();
     RF.U = 1;
-    // setting cycles
-    cyc_count += (op.cycles + cycles);
-    cycles = 0;
-}
-
-// Execute all instructions for debugging
-void CPU::Exec(const uint16_t &addr, const size_t &n) {
-    PC = addr;
-    for (size_t i = 0; i < n; i++) {
-
-        std::cout << "$" << std::hex << Misc::hex(PC, 4) << ": ";
-
-        Byte ind_op = disk->ReadMBus(PC);
-        Operation op = lookup[ind_op];
-
-        cyc_count += cycles;
-        std::cout << op.name << " <" << +(uint8_t)op.addrmode << "> "
-                  << "; A: " << Misc::hex(RA, 2) << "; X: " << Misc::hex(RX, 2)
-                  << "; Y: " << Misc::hex(RY, 2)
-                  << "; P: " << Misc::hex(RF.reg, 2)
-                  << "; SP: " << Misc::hex(SP, 2) << std::dec
-                  << "; CYC: " << +cyc_count << std::endl;
-        PC++;
-
-        // update cycles
-        cycles = op.cycles;
-        // execute
-        RF.U = 1;
-        (this->*op.func_addrmode)();
-        (this->*op.func_instruct)();
-        RF.U = 1;
-    }
 }
 
 void CPU::Print() {
-    std::cout << "A:" << Misc::hex(RA, 2) << " X:" << Misc::hex(RX, 2)
-              << " Y:" << Misc::hex(RY, 2) << " P:" << Misc::hex(RF.reg, 2)
-              << " SP:" << Misc::hex(SP, 2) << " CYC:" << +cyc_count
-              << std::endl;
+    std::string ins;
+
+    ins = Misc::hex(addr, 4) + " <" + map_str_addrmode[(uint8_t)mode] + "> " +
+          map_str_instruct[(uint8_t)instr];
+
+    switch (mode) {
+    case AddrMode::UNK:
+    case AddrMode::IMP:
+        ins += "      ";
+        break;
+    case AddrMode::IMM:
+    case AddrMode::ZPG:
+    case AddrMode::ZPX:
+    case AddrMode::ZPY:
+    case AddrMode::REL:
+    case AddrMode::IZX:
+    case AddrMode::IZY:
+    case AddrMode::IYP:
+        ins += " $" + Misc::hex(lhs, 2) + "  ";
+        break;
+    case AddrMode::ABS:
+    case AddrMode::ABX:
+    case AddrMode::AXP:
+    case AddrMode::ABY:
+    case AddrMode::AYP:
+    case AddrMode::IND:
+        ins += " $" + Misc::hex(rhs << 8 | lhs, 4);
+        break;
+    default:
+        break;
+    }
+
+    ins += " A:" + Misc::hex(RA, 2) + " X:" + Misc::hex(RX, 2) +
+           " Y:" + Misc::hex(RY, 2) + " P:" + Misc::hex(RF.reg, 2) +
+           " SP:" + Misc::hex(SP, 2) + " TABS:" + Misc::hex(TABS, 4) +
+           " CYC:" + std::to_string(cyc_count);
+
+    std::cout << ins << std::endl;
 }

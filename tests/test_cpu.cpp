@@ -24,7 +24,9 @@ TEST(CPUTest, NesLogCompare) {
 
     int limit = 5250;
 
-    for (int i = 1; i < limit; i++) {
+    for (int i = 0; i < limit; i++) {
+        cpu.Read();
+        // cpu.Print(); // print ALL logs
         cpu.RunInstr();
     }
 
